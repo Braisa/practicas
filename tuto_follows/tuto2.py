@@ -1,10 +1,10 @@
-import torch
-import torch.nn as nn
-from sklearn.datasets import fetch_california_housing
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
+import torch # type: ignore
+import torch.nn as nn # type: ignore
+from sklearn.datasets import fetch_california_housing # type: ignore
+from sklearn.model_selection import train_test_split # type: ignore
+from sklearn.metrics import mean_squared_error # type: ignore
 import matplotlib.pyplot as plt
-import pandas as pd
+import pandas as pd # type: ignore
 
 torch.manual_seed(1)
 
@@ -40,13 +40,19 @@ class EarlyStopper:
                 return True
         return False
 
-early_stopper = EarlyStopper(patience=2, delta_treshold=.005)
+early_stopper = EarlyStopper(patience=10, delta_treshold=.005)
 
 class NN(nn.Module):
     def __init__(self):
         super(NN, self).__init__()
         self.net = nn.Sequential(
             nn.Linear(3, 8),
+            nn.ReLU(),
+            nn.Linear(8, 8),
+            nn.ReLU(),
+            nn.Linear(8, 8),
+            nn.ReLU(),
+            nn.Linear(8, 8),
             nn.ReLU(),
             nn.Linear(8, 8),
             nn.ReLU(),
@@ -99,8 +105,9 @@ ax.plot(range(1, epoch+2), train_losses, color = "tab:blue", label = "Train loss
 ax.plot(range(1, epoch+2), test_losses, color = "tab:orange", label = "Test loss")
 
 ax.legend(loc = "best")
-
-fig.savefig(f"tuto_follows/tuto2_losses.pdf", dpi = 300, bbox_inches = "tight")
+ax.set_title("3:8:8:8:8:8:1")
+8
+fig.savefig(f"tuto_follows/tuto2_losses_verythick.pdf", dpi = 300, bbox_inches = "tight")
 
 error_test = mean_squared_error(y_test_tensor, y_pred_test)
 error_train = mean_squared_error(y_train_tensor, y_pred_train)
