@@ -6,7 +6,8 @@ from sklearn.metrics import accuracy_score # type: ignore
 import matplotlib.pyplot as plt
 from utils.early_stopper import EarlyStopper
 
-save_name = "tuto2_mnist"
+folder_name = "tuto2_mnist"
+save_name = "tuto2_mnist_normalized"
 
 mnist = datasets.MNIST(root="./mnist_data", train=True, download=False, transform=transforms.ToTensor())
 
@@ -19,6 +20,9 @@ X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
 X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
 y_train_tensor = torch.tensor(y_train, dtype=torch.long)
 y_test_tensor = torch.tensor(y_test, dtype=torch.long)
+
+X_train_tensor_norm = (X_train_tensor - X_train_tensor.mean()) / X_train_tensor.std()
+X_test_tensor_norm = (X_test_tensor - X_test_tensor.mean()) / X_test_tensor.std()
 
 class NN(nn.Module):
     def __init__(self):
@@ -48,7 +52,7 @@ for epoch in range(n_epochs):
 
     model.train()
     optimizer.zero_grad()
-    outputs = model(X_train_tensor)
+    outputs = model(X_train_tensor_norm)
     loss = criterion(outputs, y_train_tensor)
     loss.backward()
     optimizer.step()
@@ -57,7 +61,7 @@ for epoch in range(n_epochs):
 
     model.eval()
     with torch.no_grad():
-        test_outputs = model(X_test_tensor)
+        test_outputs = model(X_test_tensor_norm)
         test_loss = criterion(test_outputs, y_test_tensor)
         test_losses.append(test_loss.item())
     
@@ -68,8 +72,8 @@ for epoch in range(n_epochs):
 
 model.eval()
 with torch.no_grad():
-    y_pred_test = torch.argmax(model(X_test_tensor), dim=1)
-    y_pred_train = torch.argmax(model(X_train_tensor), dim=1)
+    y_pred_test = torch.argmax(model(X_test_tensor_norm), dim=1)
+    y_pred_train = torch.argmax(model(X_train_tensor_norm), dim=1)
 
 fig, ax = plt.subplots()
 
@@ -79,7 +83,7 @@ ax.plot(range(1, epoch+2), test_losses, color = "tab:orange", label = "Test loss
 ax.legend(loc = "best")
 ax.set_title("28*28:128:32:10")
 
-fig.savefig(f"tuto_follows/{save_name}_figs/{save_name}_losses.pdf", dpi = 300, bbox_inches = "tight")
+fig.savefig(f"tuto_follows/{folder_name}_figs/{save_name}_losses.pdf", dpi = 300, bbox_inches = "tight")
 
 acc_test = accuracy_score(y_test_tensor, y_pred_test)
 acc_train = accuracy_score(y_train_tensor, y_pred_train)
