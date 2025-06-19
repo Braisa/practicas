@@ -1,0 +1,87 @@
+import torch # type: ignore
+import torch.nn as nn # type: ignore
+from torchvision import transforms, datasets #type: ignore
+from sklearn.model_selection import train_test_split # type: ignore
+from sklearn.metrics import accuracy_score # type: ignore
+import matplotlib.pyplot as plt
+from utils.early_stopper import EarlyStopper
+
+save_name = "tuto2_mnist"
+
+mnist = datasets.MNIST(root="./mnist_data", train=True, download=False, transform=transforms.ToTensor())
+
+X = mnist.data.numpy().reshape(-1, 28*28) / 255.0
+y = mnist.targets.numpy()
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=3)
+
+X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
+X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
+y_train_tensor = torch.tensor(y_train, dtype=torch.long)
+y_test_tensor = torch.tensor(y_test, dtype=torch.long)
+
+class NN(nn.Module):
+    def __init__(self):
+        super(NN, self).__init__()
+        self.net = nn.Sequential(
+            nn.Linear(28*28, 128),
+            nn.ReLU(),
+            nn.Linear(128, 32),
+            nn.ReLU(),
+            nn.Linear(32, 10),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, x):
+        return self.net(x)
+
+model = NN()
+criterion = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+early_stopper = EarlyStopper(patience=20, loss_delta=0.001)
+
+n_epochs = 100
+train_losses, test_losses = [], []
+
+for epoch in range(n_epochs):
+
+    model.train()
+    optimizer.zero_grad()
+    outputs = model(X_train_tensor)
+    loss = criterion(outputs, y_train_tensor)
+    loss.backward()
+    optimizer.step()
+
+    train_losses.append(loss.item())
+
+    model.eval()
+    with torch.no_grad():
+        test_outputs = model(X_test_tensor)
+        test_loss = criterion(test_outputs, y_test_tensor)
+        test_losses.append(test_loss.item())
+    
+    print(f"Epoch{epoch+1}/{n_epochs}, Train loss : {loss.item():.4f}, Test loss : {test_loss.item():.4f}")
+
+    if early_stopper.check_early_stop(test_loss):
+        break
+
+model.eval()
+with torch.no_grad():
+    y_pred_test = torch.argmax(model(X_test_tensor), dim=1)
+    y_pred_train = torch.argmax(model(X_train_tensor), dim=1)
+
+fig, ax = plt.subplots()
+
+ax.plot(range(1, epoch+2), train_losses, color = "tab:blue", label = "Train loss")
+ax.plot(range(1, epoch+2), test_losses, color = "tab:orange", label = "Test loss")
+
+ax.legend(loc = "best")
+ax.set_title("28*28:128:32:10")
+
+fig.savefig(f"tuto_follows/{save_name}_figs/{save_name}_losses.pdf", dpi = 300, bbox_inches = "tight")
+
+acc_test = accuracy_score(y_test_tensor, y_pred_test)
+acc_train = accuracy_score(y_train_tensor, y_pred_train)
+
+print(f"Train accuracy : {acc_train:.3f}\nTest accuracy : {acc_test:.3f}")

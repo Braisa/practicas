@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import pandas as pd # type: ignore
 from utils.early_stopper import EarlyStopper
 
+save_name = "tuto2"
+
 torch.manual_seed(1)
 
 df_housing = fetch_california_housing(as_frame=True).frame
@@ -24,24 +26,24 @@ X_test_tensor = torch.from_numpy(X_test.values)
 y_train_tensor = torch.from_numpy(y_train.values).unsqueeze(1)
 y_test_tensor = torch.from_numpy(y_test.values).unsqueeze(1)
 
-early_stopper = EarlyStopper(patience=10, loss_delta=.005)
+early_stopper = EarlyStopper(patience=10000, loss_delta=.005)
 
 class NN(nn.Module):
     def __init__(self):
         super(NN, self).__init__()
         self.net = nn.Sequential(
             nn.Linear(3, 8),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(8, 8),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(8, 8),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(8, 8),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(8, 8),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(8, 1),
-            nn.ReLU()
+            nn.LeakyReLU()
         )
     
     def forward(self, x):
@@ -75,7 +77,7 @@ for epoch in range(n_epochs):
     
     print(f"Epoch {epoch+1}/{n_epochs}, Train loss : {loss.item():.4f}, Test loss : {test_loss.item():.4f}")
 
-    if early_stopper.early_stop(test_loss):
+    if early_stopper.check_early_stop(test_loss):
         break
 
 model.eval()
@@ -90,8 +92,8 @@ ax.plot(range(1, epoch+2), test_losses, color = "tab:orange", label = "Test loss
 
 ax.legend(loc = "best")
 ax.set_title("3:8:8:8:8:8:1")
-8
-fig.savefig(f"tuto_follows/tuto2_figs/tuto2_losses_verythick.pdf", dpi = 300, bbox_inches = "tight")
+
+fig.savefig(f"tuto_follows/{save_name}_figs/{save_name}_losses_verythick.pdf", dpi = 300, bbox_inches = "tight")
 
 error_test = mean_squared_error(y_test_tensor, y_pred_test)
 error_train = mean_squared_error(y_train_tensor, y_pred_train)

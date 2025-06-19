@@ -7,7 +7,7 @@ class EarlyStopper:
         self.prev_loss = float("inf")
     
     def check_early_stop(self, loss):
-        if loss > (self.prev_loss + self.loss_delta) or loss < (self.prev_losss - self.loss_delta):
+        if loss > (self.prev_loss + self.loss_delta) or loss < (self.prev_loss - self.loss_delta):
             self.prev_loss = loss
             self.counter = 0
         else:
