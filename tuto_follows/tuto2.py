@@ -107,7 +107,7 @@ ax.plot(range(1, epoch+2), test_losses, color = "tab:orange", label = "Test loss
 ax.legend(loc = "best")
 ax.set_title("3:8:8:8:8:8:1")
 8
-fig.savefig(f"tuto_follows/tuto2_losses_verythick.pdf", dpi = 300, bbox_inches = "tight")
+fig.savefig(f"tuto_follows/tuto2_figs/tuto2_losses_verythick.pdf", dpi = 300, bbox_inches = "tight")
 
 error_test = mean_squared_error(y_test_tensor, y_pred_test)
 error_train = mean_squared_error(y_train_tensor, y_pred_train)
