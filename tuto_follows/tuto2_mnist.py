@@ -12,8 +12,6 @@ save_name = "tuto2_mnist_batch_512_veryslow"
 
 mnist = datasets.MNIST(root="./mnist_data", train=True, download=False, transform=transforms.ToTensor())
 
-train_loader = DataLoader(dataset=mnist, batch_size=512)
-
 X_data = mnist.data.numpy().reshape(-1, 28*28) / 255.0
 y_data = mnist.targets.numpy()
 
@@ -86,7 +84,7 @@ for epoch in range(n_epochs):
             test_loss = criterion(test_outputs, y)
         test_losses.append(test_loss.item())
     
-    print(f"Epoch{epoch+1}/{n_epochs}, Train loss : {loss.item():.4f}, Test loss : {test_loss.item():.4f}")
+    print(f"Epoch {epoch+1}/{n_epochs}, Train loss : {loss.item():.4f}, Test loss : {test_loss.item():.4f}")
 
     if early_stopper.check_early_stop(test_loss):
         break
