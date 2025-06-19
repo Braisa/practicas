@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split # type: ignore
 from sklearn.metrics import mean_squared_error # type: ignore
 import matplotlib.pyplot as plt
 import pandas as pd # type: ignore
+from utils.early_stopper import EarlyStopper
 
 torch.manual_seed(1)
 
@@ -23,24 +24,7 @@ X_test_tensor = torch.from_numpy(X_test.values)
 y_train_tensor = torch.from_numpy(y_train.values).unsqueeze(1)
 y_test_tensor = torch.from_numpy(y_test.values).unsqueeze(1)
 
-class EarlyStopper:
-    def __init__(self, patience=1, delta_treshold=0):
-        self.patience = patience
-        self.delta_threshold = delta_treshold
-        self.counter = 0
-        self.prev_loss = float('inf')
-
-    def early_stop(self, loss):
-        if loss < (self.prev_loss - self.delta_threshold):
-            self.prev_loss = loss
-            self.counter = 0
-        elif loss > (self.prev_loss - self.delta_threshold):
-            self.counter += 1
-            if self.counter >= self.patience:
-                return True
-        return False
-
-early_stopper = EarlyStopper(patience=10, delta_treshold=.005)
+early_stopper = EarlyStopper(patience=10, loss_delta=.005)
 
 class NN(nn.Module):
     def __init__(self):
