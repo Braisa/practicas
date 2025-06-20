@@ -26,7 +26,7 @@ class Conv_NN(nn.Module):
             nn.ReLU(),
             nn.Dropout(p=0.5),
             nn.Linear(128, 10),
-            nn.LogSoftmax(dim=1)
+            #nn.Sigmoid()
         )
     
     def forward(self, x):
@@ -37,17 +37,17 @@ class Conv_NN(nn.Module):
 
 def train(args, model, loader, optimizer, epoch):
     model.train()
-    logged_losses = []
+    train_losses = []
     for batch_index, (data, target) in enumerate(loader):
         optimizer.zero_grad()
         output = model(data)
-        loss = nn.functional.nll_loss(output, target)
+        loss = nn.functional.cross_entropy(output, target)
         loss.backward()
         optimizer.step()
+        train_losses.append(loss.item())
         if batch_index % args.logging_interval == 0:
             print(f"Training epoch {epoch} [{batch_index*len(data)}/{len(loader.dataset)}]\tLoss: {loss.item():.6f}")
-            logged_losses.append(loss.item())
-    return logged_losses
+    return train_losses
 
 def test(args, model, loader):
     model.eval()
@@ -56,21 +56,38 @@ def test(args, model, loader):
     with torch.no_grad():
         for data, target in loader:
             output = model(data)
-            losses.append(nn.functional.nll_loss(output, target, reduction="mean").item())
+            losses.append(nn.functional.cross_entropy(output, target, reduction="mean").item())
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
     test_loss = np.mean(losses)
-    print(f"Testing, Average loss: {test_loss:.6f}, Accuracy {100.*correct/len(loader.dataset):.2f}%")
+    print(f"Testing, Average loss: {test_loss:.6f}\tAccuracy [{correct}/{len(loader.dataset)}] {100.*correct/len(loader.dataset):.2f}%")
     return test_loss
 
+def paint_losses(args, train_losses, test_losses, train_loader, test_loader):
+
+    fig, ax = plt.subplots()
+
+    train_spots = np.arange(1, 1+args.epochs*(1+(len(train_loader.dataset)//args.train_batch_size))) * args.train_batch_size
+    test_spots = np.arange(1, 1+len(test_losses)) * len(train_loader.dataset)
+
+    ax.plot(train_spots, train_losses, ls="solid", color="tab:blue", label="Train loss")
+    ax.plot(test_spots, test_losses, ls="None", marker="o", color="tab:orange", label="Test loss")
+
+    ax.legend(loc = "best")
+    
+    fig.savefig(f"tuto_follows/{args.folder_name}_figs/{args.save_name}_losses.pdf", dpi = 300, bbox_inches = "tight")
+
 def main():
+    
+    parser = argparse.ArgumentParser(description="CNN MNIST")
+    
     # File settings
-    folder_name = "mnist_conv"
-    save_name = "mnist_conv_example"
+    parser.add_argument("--folder-name", type=str, default="mnist_conv",
+                        help="input folder for storing figures (default=mnist_conv)")
+    parser.add_argument("--save-name", type=str, default="mnist_conv",
+                        help="input file save name (default=mnist_conv)")
 
     # Training settings
-    parser = argparse.ArgumentParser(description="CNN MNIST")
-
     parser.add_argument("--train-batch-size", type=int, default=64,
                         help="input training batch size (default=64)")
     parser.add_argument("--test-batch-size", type=int, default=1000,
@@ -111,21 +128,16 @@ def main():
         case "SGD":
             optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
+    train_losses, test_losses = [], []
+
     for epoch in range(1, args.epochs+1):
-        train_loss = train(args, model, train_loader, optimizer, epoch)
+        train_log = train(args, model, train_loader, optimizer, epoch)
         test_loss = test(args, model, test_loader)
-    
-    """
-    fig, ax = plt.subplots()
 
-    ax.plot(range(1, epoch+2), train_losses, color = "tab:blue", label = "Train loss")
-    ax.plot(range(1, epoch+2), test_losses, color = "tab:orange", label = "Test loss")
+        train_losses.append(train_log)
+        test_losses.append(test_loss)
 
-    ax.legend(loc = "best")
-    ax.set_title("conv10:conv20:320:100:10")
-
-    fig.savefig(f"tuto_follows/{folder_name}_figs/{save_name}_losses.pdf", dpi = 300, bbox_inches = "tight")
-    """
+    paint_losses(args, np.ravel(train_losses), test_losses, train_loader, test_loader)
 
 if __name__ == "__main__":
     main()
