@@ -7,108 +7,119 @@ from sklearn.metrics import accuracy_score # type: ignore
 import matplotlib.pyplot as plt
 from utils.early_stopper import EarlyStopper
 from time import time
-
-folder_name = "mnist_conv"
-save_name = "mnist_conv"
-
-n_filters = 10
-
-n_epochs = 5
-batch_size_train, batch_size_test = 512, 512
-learning_rate = 1e-2
-
-torch.manual_seed(1)
-
-loader_train = DataLoader(
-    datasets.MNIST(root="./mnist_data", train=True, download=False, transform=transforms.ToTensor()),
-    batch_size=batch_size_train, shuffle=True
-)
-
-loader_test = DataLoader(
-    datasets.MNIST(root="./mnist_data", train=False, download=False, transform=transforms.ToTensor()),
-    batch_size=batch_size_test, shuffle=True
-)
+import numpy as np
+import argparse
 
 class Conv_NN(nn.Module):
-    def __init__(self, n_filters=10):
+    def __init__(self):
         super(Conv_NN, self).__init__()
-        self.n_filters = n_filters
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(1, self.n_filters, kernel_size=3), #28*28 -> 26*26
-            nn.BatchNorm2d(self.n_filters),
+            nn.Conv2d(1, 5, kernel_size=3, stride=1), # 28*28 -> 26*26
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=3,stride=1) #26*26 -> 24*24
+            nn.Conv2d(5, 10, kernel_size=3, stride=1), # 26*26 -> 24*24
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2), # 24*24 -> 12*12
+            nn.Dropout(p=0.25)
         )
         self.linear_layers = nn.Sequential(
-            nn.Linear(24*24*self.n_filters, 128),
+            nn.Linear(1440, 128),
             nn.ReLU(),
-            nn.Linear(128, 36),
-            nn.ReLU(),
-            nn.Linear(36, 10),
-            nn.Sigmoid()
+            nn.Dropout(p=0.5),
+            nn.Linear(128, 10),
+            nn.LogSoftmax(dim=1)
         )
     
     def forward(self, x):
         x = self.conv_layers(x)
-        x = x.reshape(-1, 24*24*self.n_filters) # flattens
+        x = torch.flatten(x, 1)
         x = self.linear_layers(x)
         return x
 
-model = Conv_NN(n_filters=n_filters)
-criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-
-early_stopper = EarlyStopper(patience=20, loss_delta=0.001)
-
-train_losses, test_losses = [], []
-
-def train(epoch):
-    initial_time = time()
+def train(args, model, loader, optimizer, epoch):
     model.train()
-    loss_sum = 0
-    correct = 0
-    for data, target in loader_train:
+    logged_losses = []
+    for batch_index, (data, target) in enumerate(loader):
         optimizer.zero_grad()
-        outputs = model(data)
-        loss = criterion(outputs, target)
+        output = model(data)
+        loss = nn.functional.nll_loss(output, target)
         loss.backward()
         optimizer.step()
-        loss_sum += loss.item()
-        predictions = torch.argmax(outputs, dim=1)
-        correct += target.eq(predictions).sum()
-    train_losses.append(loss_sum/len(loader_train.dataset))
-    epoch_lapse = time() - initial_time
-    print(f"Epoch {epoch+1}/{n_epochs}, Train loss : {train_losses[-1]:.4f}, Train lapse : {epoch_lapse:.2f}, Train accuracy : {correct/len(loader_train.dataset):.3f}")
+        if batch_index % args.logging_interval == 0:
+            print(f"Training epoch {epoch} [{batch_index*len(data)}/{len(loader.dataset)}]\tLoss: {loss.item():.6f}")
+            logged_losses.append(loss.item())
+    return logged_losses
 
-def test(epoch):
-    initial_time = time()
+def test(args, model, loader):
     model.eval()
-    loss_sum = 0
+    losses = []
     correct = 0
     with torch.no_grad():
-        for data, target in loader_test:
-            outputs = model(data)
-            loss_sum += criterion(outputs, target)
-            predictions = torch.argmax(outputs, dim=1)
-            correct += target.eq(predictions).sum()
-        test_losses.append(loss_sum/len(loader_test.dataset))
-    epoch_lapse = time() - initial_time
-    print(f"Epoch {epoch+1}/{n_epochs}, Test loss : {test_losses[-1]:.4f}, Test lapse : {epoch_lapse:.2f}, Test accuracy : {correct/len(loader_test.dataset):.3f}")
+        for data, target in loader:
+            output = model(data)
+            losses.append(nn.functional.nll_loss(output, target, reduction="mean").item())
+            pred = output.argmax(dim=1, keepdim=True)
+            correct += pred.eq(target.view_as(pred)).sum().item()
+    test_loss = np.mean(losses)
+    print(f"Testing, Average loss: {test_loss:.6f}, Accuracy {100.*correct/len(loader.dataset):.2f}%")
+    return test_loss
 
-for epoch in range(n_epochs):
+def main():
+    # File settings
+    folder_name = "mnist_conv"
+    save_name = "mnist_conv_example"
 
-    train(epoch)
-    test(epoch)
+    # Training settings
+    parser = argparse.ArgumentParser(description="CNN MNIST")
+
+    parser.add_argument("--train-batch-size", type=int, default=64,
+                        help="input training batch size (default=64)")
+    parser.add_argument("--test-batch-size", type=int, default=1000,
+                        help="input testing batch size (default=1000)")
+    parser.add_argument("--epochs", type=int, default=3,
+                        help="input number of epochs (default=3)")
+    parser.add_argument("--learning-rate", type=float, default=1e-2,
+                        help="input learning rate (default=0.01)")
+    parser.add_argument("--random-seed", type=int, default=1,
+                        help="input random seed (default=1)")
+    parser.add_argument("--logging-interval", type=int, default=50,
+                        help="input logging interval (default=50)")
+    args = parser.parse_args()
+
+    torch.manual_seed(1)
+
+    trans = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((.1307,),(.3081,))
+    ])
+
+    train_loader = DataLoader(
+        datasets.MNIST(root="./mnist_data", train=True, download=False, transform=trans),
+        batch_size=args.train_batch_size, shuffle=True
+    )
+
+    test_loader = DataLoader(
+        datasets.MNIST(root="./mnist_data", train=False, download=False, transform=trans),
+        batch_size=args.test_batch_size, shuffle=True
+    )
+
+    model = Conv_NN()
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+
+    for epoch in range(1, args.epochs+1):
+        train_loss = train(args, model, train_loader, optimizer, epoch)
+        test_loss = test(args, model, test_loader)
     
-    if early_stopper.check_early_stop(test_losses[-1]):
-        break
+    """
+    fig, ax = plt.subplots()
 
-fig, ax = plt.subplots()
+    ax.plot(range(1, epoch+2), train_losses, color = "tab:blue", label = "Train loss")
+    ax.plot(range(1, epoch+2), test_losses, color = "tab:orange", label = "Test loss")
 
-ax.plot(range(1, epoch+2), train_losses, color = "tab:blue", label = "Train loss")
-ax.plot(range(1, epoch+2), test_losses, color = "tab:orange", label = "Test loss")
+    ax.legend(loc = "best")
+    ax.set_title("conv10:conv20:320:100:10")
 
-ax.legend(loc = "best")
-ax.set_title("conv:24*24*10:128:32:10")
+    fig.savefig(f"tuto_follows/{folder_name}_figs/{save_name}_losses.pdf", dpi = 300, bbox_inches = "tight")
+    """
 
-fig.savefig(f"tuto_follows/{folder_name}_figs/{save_name}_losses.pdf", dpi = 300, bbox_inches = "tight")
+if __name__ == "__main__":
+    main()
