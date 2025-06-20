@@ -77,12 +77,14 @@ def main():
                         help="input testing batch size (default=1000)")
     parser.add_argument("--epochs", type=int, default=3,
                         help="input number of epochs (default=3)")
-    parser.add_argument("--learning-rate", type=float, default=1e-2,
+    parser.add_argument("--learning-rate", type=float, default=1e-3,
                         help="input learning rate (default=0.01)")
     parser.add_argument("--random-seed", type=int, default=1,
                         help="input random seed (default=1)")
     parser.add_argument("--logging-interval", type=int, default=50,
                         help="input logging interval (default=50)")
+    parser.add_argument("--optim", type=str, default="Adam",
+                        help="input optimizer (default=Adam)")
     args = parser.parse_args()
 
     torch.manual_seed(1)
@@ -103,7 +105,11 @@ def main():
     )
 
     model = Conv_NN()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    match args.optim:
+        case "Adam":
+            optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+        case "SGD":
+            optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
     for epoch in range(1, args.epochs+1):
         train_loss = train(args, model, train_loader, optimizer, epoch)
