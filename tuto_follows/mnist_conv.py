@@ -46,22 +46,29 @@ def train(args, model, loader, optimizer, epoch):
         optimizer.step()
         train_losses.append(loss.item())
         if batch_index % args.logging_interval == 0:
-            print(f"Training epoch {epoch} [{batch_index*len(data)}/{len(loader.dataset)}]\tLoss: {loss.item():.6f}")
+            print(f"Training epoch {epoch} [{batch_index*len(data)}/{len(loader.dataset)}]\tLoss: {loss.item():.6f}", end="\r")
+    print(f"\033[K", end="\r")
+    print(f"Training epoch {epoch} complete")
     return train_losses
 
-def test(args, model, loader):
+def test(args, model, loader, no_print=False):
     model.eval()
     losses = []
     correct = 0
     with torch.no_grad():
-        for data, target in loader:
+        for batch_index, (data, target) in enumerate(loader):
             output = model(data)
             losses.append(nn.functional.cross_entropy(output, target, reduction="mean").item())
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
+            if not no_print:
+                print(f"Testing progress [{batch_index*len(data)}/{len(loader.dataset)}] {100.*batch_index*len(data)/len(loader.dataset):.2f}%", end="\r")
+    print(f"\033[K", end="\r")
     test_loss = np.mean(losses)
-    print(f"Testing, Average loss: {test_loss:.6f}\tAccuracy [{correct}/{len(loader.dataset)}] {100.*correct/len(loader.dataset):.2f}%")
-    return test_loss
+    accuracy = correct/len(loader.dataset)
+    if not no_print:
+        print(f"Testing, Average loss: {test_loss:.6f}\tAccuracy [{correct}/{len(loader.dataset)}] {100.*correct/len(loader.dataset):.2f}%")
+    return test_loss, accuracy
 
 def paint_losses(args, train_losses, test_losses, train_loader, test_loader):
 
@@ -73,18 +80,42 @@ def paint_losses(args, train_losses, test_losses, train_loader, test_loader):
     ax.plot(train_spots, train_losses, ls="solid", color="tab:blue", label="Train loss")
     ax.plot(test_spots, test_losses, ls="None", marker="o", color="tab:orange", label="Test loss")
 
-    ax.legend(loc = "best")
+    ax.xaxis.set_major_locator(plt.MultipleLocator(len(train_loader.dataset)))
     
-    fig.savefig(f"tuto_follows/{args.folder_name}_figs/{args.save_name}_losses.pdf", dpi = 300, bbox_inches = "tight")
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0)
+
+    ax.legend(loc="best")
+    
+    fig.savefig(f"tuto_follows/{args.folder_name}_figs/{args.save_name}_losses.pdf", dpi=300, bbox_inches="tight")
+
+def paint_accuracies(args, train_accuracies, test_accuracies):
+    
+    fig, ax = plt.subplots()
+
+    spots = np.arange(1, 1+args.epochs)
+
+    ax.plot(spots, train_accuracies, ls="dashed", marker="o", color="tab:blue", label="Train accuracy")
+    ax.plot(spots, test_accuracies, ls="dashed", marker="o", color="tab:orange", label="Test accuracy")
+
+    ax.set_ylim(top=1)
+
+    ax.xaxis.set_major_locator(plt.MultipleLocator(1))
+    ax.yaxis.set_major_locator(plt.MultipleLocator(.005))
+    ax.yaxis.set_minor_locator(plt.MultipleLocator(.001))
+
+    ax.legend(loc="best")
+
+    fig.savefig(f"tuto_follows/{args.folder_name}_figs/{args.save_name}_accuracies.pdf", dpi=300, bbox_inches="tight")
 
 def main():
     
     parser = argparse.ArgumentParser(description="CNN MNIST")
     
     # File settings
-    parser.add_argument("--folder-name", type=str, default="mnist_conv",
+    parser.add_argument("--folder-name", type=str, default="mnist_cnn",
                         help="input folder for storing figures (default=mnist_conv)")
-    parser.add_argument("--save-name", type=str, default="mnist_conv",
+    parser.add_argument("--save-name", type=str, default="mnist_cnn",
                         help="input file save name (default=mnist_conv)")
 
     # Training settings
@@ -102,9 +133,11 @@ def main():
                         help="input logging interval (default=50)")
     parser.add_argument("--optim", type=str, default="Adam",
                         help="input optimizer (default=Adam)")
+    parser.add_argument("--seed", type=int, default=1,
+                        help="input random seed (default=1)")
     args = parser.parse_args()
 
-    torch.manual_seed(1)
+    torch.manual_seed(args.seed)
 
     trans = transforms.Compose([
         transforms.ToTensor(),
@@ -129,15 +162,21 @@ def main():
             optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
     train_losses, test_losses = [], []
+    train_accuracies, test_accuracies = [], []
 
     for epoch in range(1, args.epochs+1):
         train_log = train(args, model, train_loader, optimizer, epoch)
-        test_loss = test(args, model, test_loader)
+        _, train_accuracy = test(args, model, train_loader, no_print=False)
+        test_loss, test_accuracy = test(args, model, test_loader)
 
         train_losses.append(train_log)
         test_losses.append(test_loss)
 
+        train_accuracies.append(train_accuracy)
+        test_accuracies.append(test_accuracy)
+
     paint_losses(args, np.ravel(train_losses), test_losses, train_loader, test_loader)
+    paint_accuracies(args, train_accuracies, test_accuracies)
 
 if __name__ == "__main__":
     main()
