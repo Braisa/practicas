@@ -35,7 +35,8 @@ class Conv_NN(nn.Module):
         x = self.linear_layers(x)
         return x
 
-def train(args, model, loader, optimizer, epoch):
+def train(args, model, loader, optimizer, epoch, no_print=False):
+    initial_time = time()
     model.train()
     train_losses = []
     for batch_index, (data, target) in enumerate(loader):
@@ -45,13 +46,15 @@ def train(args, model, loader, optimizer, epoch):
         loss.backward()
         optimizer.step()
         train_losses.append(loss.item())
-        if batch_index % args.logging_interval == 0:
+        if not no_print and batch_index % args.logging_interval == 0:
             print(f"Training epoch {epoch} [{batch_index*len(data)}/{len(loader.dataset)}]\tLoss: {loss.item():.6f}", end="\r")
-    print(f"\033[K", end="\r")
-    print(f"Training epoch {epoch} complete")
+    if not no_print:
+        print(f"\033[K", end="\r")
+        print(f"Training epoch {epoch} complete ({time()-initial_time:.2f}s elapsed)")
     return train_losses
 
 def test(args, model, loader, no_print=False):
+    initial_time = time()
     model.eval()
     losses = []
     correct = 0
@@ -63,15 +66,14 @@ def test(args, model, loader, no_print=False):
             correct += pred.eq(target.view_as(pred)).sum().item()
             if not no_print:
                 print(f"Testing progress [{batch_index*len(data)}/{len(loader.dataset)}] {100.*batch_index*len(data)/len(loader.dataset):.2f}%", end="\r")
-    print(f"\033[K", end="\r")
     test_loss = np.mean(losses)
     accuracy = correct/len(loader.dataset)
     if not no_print:
-        print(f"Testing, Average loss: {test_loss:.6f}\tAccuracy [{correct}/{len(loader.dataset)}] {100.*correct/len(loader.dataset):.2f}%")
+        print(f"\033[K", end="\r")
+        print(f"Testing, Average loss: {test_loss:.6f}\tAccuracy [{correct}/{len(loader.dataset)}] {100.*correct/len(loader.dataset):.2f}% ({time()-initial_time:.2f}s elapsed)")
     return test_loss, accuracy
 
 def paint_losses(args, train_losses, test_losses, train_loader, test_loader):
-
     fig, ax = plt.subplots()
 
     train_spots = np.arange(1, 1+args.epochs*(1+(len(train_loader.dataset)//args.train_batch_size))) * args.train_batch_size
@@ -90,7 +92,6 @@ def paint_losses(args, train_losses, test_losses, train_loader, test_loader):
     fig.savefig(f"tuto_follows/{args.folder_name}_figs/{args.save_name}_losses.pdf", dpi=300, bbox_inches="tight")
 
 def paint_accuracies(args, train_accuracies, test_accuracies):
-    
     fig, ax = plt.subplots()
 
     spots = np.arange(1, 1+args.epochs)
@@ -109,6 +110,7 @@ def paint_accuracies(args, train_accuracies, test_accuracies):
     fig.savefig(f"tuto_follows/{args.folder_name}_figs/{args.save_name}_accuracies.pdf", dpi=300, bbox_inches="tight")
 
 def main():
+    main_time = time()
     
     parser = argparse.ArgumentParser(description="CNN MNIST")
     
@@ -177,6 +179,13 @@ def main():
 
     paint_losses(args, np.ravel(train_losses), test_losses, train_loader, test_loader)
     paint_accuracies(args, train_accuracies, test_accuracies)
+
+    main_total = time()-main_time
+    main_days = int(main_total // 86400)
+    main_hours = int((main_total % 86400) // 3600)
+    main_minutes = int(((main_total % 86400) % 3600) // 60)
+    main_seconds = int(((main_total % 86400) % 3600) % 60)
+    print(f"Program complete ({main_days:02}:{main_hours:02}:{main_minutes:02}:{main_seconds:02} elapsed)")
 
 if __name__ == "__main__":
     main()
