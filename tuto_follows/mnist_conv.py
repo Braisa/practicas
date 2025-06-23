@@ -15,8 +15,10 @@ class Conv_NN(nn.Module):
         super(Conv_NN, self).__init__()
         self.conv_layers = nn.Sequential(
             nn.Conv2d(1, 5, kernel_size=3, stride=1), # 28*28 -> 26*26
+            #nn.BatchNorm2d(5),
             nn.ReLU(),
             nn.Conv2d(5, 10, kernel_size=3, stride=1), # 26*26 -> 24*24
+            #nn.BatchNorm2d(10),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2), # 24*24 -> 12*12
             nn.Dropout(p=0.25)
