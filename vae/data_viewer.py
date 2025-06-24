@@ -23,7 +23,7 @@ def ax_setup(ax, title):
     ax.legend(loc="best")
     ax.set_title(title)
 
-# Comparing for different momentum, with centered particle and same collimation
+# Comparing for different pressures, with centered particle and same collimation
 
 p_indexes = (
     np.where((dcols==5.) & (ps==10.) & (xs==0.) & (ys==0.))[0][0],
@@ -33,7 +33,7 @@ p_indexes = (
     np.where((dcols==5.) & (ps==50.) & (xs==0.) & (ys==0.))[0][0],
 )
 
-# Comparing for different position, with same momentum and collimation
+# Comparing for different position, with same pressure and collimation
 
 pos_indexes = (
     np.where((dcols==5.) & (ps==30.) & (xs==0.) & (ys==0.))[0][0],
@@ -43,7 +43,7 @@ pos_indexes = (
     np.where((dcols==5.) & (ps==30.) & (xs==4000.) & (ys==4000.))[0][0],
 )
 
-# Comparing for off-centering in one direction, with same momentum and collimation
+# Comparing for off-centering in one direction, with same pressure and collimation
 
 offcentering_indexes = (
     np.where((dcols==5.) & (ps==30.) & (xs==0.) & (ys==0.))[0][0],
@@ -53,7 +53,7 @@ offcentering_indexes = (
     np.where((dcols==5.) & (ps==30.) & (xs==-2000.) & (ys==0.))[0][0],
 )
 
-# Comparing for different collimation lengths, for centered particles with same momentum
+# Comparing for different collimation lengths, for centered particles with same pressure
 
 collimation_indexes = (
     np.where((dcols==5.) & (ps==30.) & (xs==0.) & (ys==0.))[0][0],
@@ -63,7 +63,7 @@ collimation_indexes = (
     np.where((dcols==50.) & (ps==30.) & (xs==0.) & (ys==0.))[0][0],
 )
 
-# Comparing for different collimation lengths, for offset particles with same momentum
+# Comparing for different collimation lengths, for offset particles with same pressure
 
 offsetcollimation_indexes = (
     np.where((dcols==5.) & (ps==30.) & (xs==2000.) & (ys==0.))[0][0],
@@ -83,7 +83,7 @@ all_indexes = (
 )
 
 fig_names = (
-    "momentum_comparison",
+    "pressure_comparison",
     "position_comparison",
     "offcentering_comparison",
     "collimation_comparison",
