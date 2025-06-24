@@ -94,7 +94,7 @@ fig_titles = (
     "Centered particles, dcol=5",
     "p=30, dcol=5",
     "p=30, dcol=5, y=0",
-    "Centered particles, dcol=5",
+    "Centered particles, p=30",
     "p=30, off_x=2000, y=0"
 )
 
