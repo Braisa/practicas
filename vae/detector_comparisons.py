@@ -124,4 +124,4 @@ for indexes, name, title, lab, values in zip(all_indexes, fig_names, fig_titles,
         ax.plot(spots, ns[index], label=f"{lab}={value}")
     
     ax_setup(ax, title)
-    fig.savefig(f"vae/vae_figs/{name}.pdf", dpi=300, bbox_inches="tight")
+    fig.savefig(f"vae/data_figs/{name}.pdf", dpi=300, bbox_inches="tight")
