@@ -95,13 +95,13 @@ fig_titles = (
     "p=30, dcol=5",
     "p=30, dcol=5, y=0",
     "Centered particles, p=30",
-    "p=30, off_x=2000, y=0"
+    "p=30, x=2000, y=0"
 )
 
 label_names = (
     "p",
     "pos",
-    "off_x",
+    "x",
     "dcol",
     "dcol"
 )
