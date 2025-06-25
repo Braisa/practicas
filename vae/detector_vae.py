@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from utils.early_stopper import EarlyStopper
 from time import time
 import numpy as np
-import pandas as pd
+import pandas as pd # type: ignore
 import argparse
 from scipy.signal.windows import gaussian
 
@@ -17,9 +17,9 @@ class VAE(nn.Module):
         super(VAE, self).__init__()
         self.encoder = nn.Sequential(
             nn.Linear(132, 64),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(64, 16),
-            nn.ReLU()
+            nn.LeakyReLU()
         )
         self.mean_layer = nn.Linear(16, 2)
         self.logvar_layer = nn.Linear(16, 2)
@@ -144,9 +144,7 @@ def generate_graph(args, model, mean, var):
 
     fig.savefig(f"vae/{args.folder_name}_gen/{args.save_name}_gen.pdf", dpi=300, bbox_inches="tight")
 
-def main():
-    main_time = time()
-    
+def create_parser():
     parser = argparse.ArgumentParser(description="Variational Autoencoder")
     
     # File settings
@@ -160,8 +158,8 @@ def main():
                         help="input training batch size (default=64)")
     parser.add_argument("--test-batch-size", type=int, default=1000,
                         help="input testing batch size (default=1000)")
-    parser.add_argument("--epochs", type=int, default=3,
-                        help="input number of epochs (default=3)")
+    parser.add_argument("--epochs", type=int, default=100,
+                        help="input number of epochs (default=100)")
     parser.add_argument("--learning-rate", type=float, default=1e-3,
                         help="input learning rate (default=0.01)")
     parser.add_argument("--random-seed", type=int, default=1,
@@ -174,6 +172,13 @@ def main():
                         help="input random seed (default=1)")
     parser.add_argument("--save", type=bool, default=False,
                         help="input whether to save model (default=False)")
+    
+    return parser
+
+def main():
+    main_time = time()
+    
+    parser = create_parser()
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
