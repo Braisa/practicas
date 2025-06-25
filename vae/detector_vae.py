@@ -13,18 +13,19 @@ import argparse
 from scipy.signal.windows import gaussian
 
 class VAE(nn.Module):
-    def __init__(self):
+    def __init__(self, latent_dim=8):
         super(VAE, self).__init__()
+        self.latent_dim = latent_dim
         self.encoder = nn.Sequential(
             nn.Linear(132, 64),
-            nn.LeakyReLU(),
+            nn.ReLU(),
             nn.Linear(64, 16),
-            nn.LeakyReLU()
+            nn.ReLU()
         )
-        self.mean_layer = nn.Linear(16, 2)
-        self.logvar_layer = nn.Linear(16, 2)
+        self.mean_layer = nn.Linear(16, self.latent_dim)
+        self.logvar_layer = nn.Linear(16, self.latent_dim)
         self.decoder = nn.Sequential(
-            nn.Linear(2, 24),
+            nn.Linear(self.latent_dim, 24),
             nn.ReLU(),
             nn.Linear(24, 64),
             nn.ReLU(),
@@ -49,7 +50,7 @@ class VAE(nn.Module):
         mean, logvar = self.encode(x)
         z = self.reparameterization(mean, logvar)
         t = self.decode(z)
-        return t
+        return t, mean, logvar
 
 class DetectorDataset(Dataset):
     def __init__(self, counts):
@@ -61,12 +62,11 @@ class DetectorDataset(Dataset):
     def __getitem__(self, index):
         return self.data[index]
 
-def loss_function(x, target):
-    gw = torch.from_numpy(gaussian(33,1))
-    ref_gaussian = torch.cat((gw,gw,gw,gw))
-    
+def loss_function(args, output, target):
+    x, mu, logvar = output
+
     mse_loss = nn.functional.mse_loss(x, target)
-    kld_loss = nn.functional.kl_div(x, ref_gaussian, reduction="batchmean")
+    kld_loss = -.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
     return mse_loss + kld_loss
 
@@ -77,7 +77,7 @@ def train(args, model, loader, optimizer, epoch, no_print=False):
     for batch_index, counts in enumerate(loader):
         optimizer.zero_grad()
         output = model(counts)
-        loss = loss_function(output, counts)
+        loss = loss_function(args, output, counts)
         loss.backward()
         optimizer.step()
         train_losses.append(loss.item())
@@ -95,8 +95,7 @@ def test(args, model, loader, no_print=False):
     with torch.no_grad():
         for batch_index, counts in enumerate(loader):
             output = model(counts)
-            losses.append(loss_function(output, counts).item())
-            pred = output.argmax(dim=1, keepdim=True)
+            losses.append(loss_function(args, output, counts).item())
             if not no_print:
                 print(f"Testing progress [{batch_index*len(counts)}/{len(loader.dataset)}] {100.*batch_index*len(counts)/len(loader.dataset):.2f}%", end="\r")
     test_loss = np.mean(losses)
@@ -122,25 +121,27 @@ def paint_losses(args, train_losses, test_losses, train_loader, test_loader):
     
     fig.savefig(f"vae/{args.folder_name}_figs/{args.save_name}_losses.pdf", dpi=300, bbox_inches="tight")
 
-def generate_graph(args, model, mean, var):
-    fig, ax = plt.subplots()
+def generate_graph(args, model, number=1):
+
+    fig, axs = plt.subplots(number, number, figsize=(1.5*number,1.5*number), sharex="all", layout="compressed")
 
     spots = np.arange(1, 1+33*4)
 
-    model.eval()
-    with torch.no_grad():
-        counts = model.decode(torch.tensor((mean, var)))
-    
-    ax.plot(spots, counts)
+    for ax in axs.ravel():
+        model.eval()
+        with torch.no_grad():
+            counts = model.decode(torch.randn(model.latent_dim))
+        
+        ax.plot(spots, counts, color = "tab:orange")
 
-    ax.set_xlabel("Detector position")
-    ax.set_ylabel("Photon count")
+        ax.set_xlim(left=1, right=33*4)
+        ax.set_ylim(bottom=0)
 
-    ax.set_xlim(left=1, right=33*4)
-    ax.set_ylim(bottom=0)
+        ax.xaxis.set_major_locator(plt.MultipleLocator(base=33))
+        ax.xaxis.set_minor_locator(plt.MultipleLocator(1))
 
-    ax.xaxis.set_major_locator(plt.MultipleLocator(base=33))
-    ax.xaxis.set_minor_locator(plt.MultipleLocator(1))
+    fig.supxlabel("Detector position")
+    fig.supylabel("Photon count")
 
     fig.savefig(f"vae/{args.folder_name}_gen/{args.save_name}_gen.pdf", dpi=300, bbox_inches="tight")
 
@@ -172,6 +173,10 @@ def create_parser():
                         help="input random seed (default=1)")
     parser.add_argument("--save", type=bool, default=False,
                         help="input whether to save model (default=False)")
+    parser.add_argument("--load", type=bool, default=False,
+                        help="enable load mode, loading from save-name (default=False)")
+    parser.add_argument("--print-number", type=int, default=1,
+                        help="input printed outputs number, which will be squared (default=1)")
     
     return parser
 
@@ -199,28 +204,32 @@ def main():
     )
 
     model = VAE()
-    match args.optim:
-        case "Adam":
-            optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
-        case "SGD":
-            optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
+    if not args.load:
+        match args.optim:
+            case "Adam":
+                optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+            case "SGD":
+                optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
-    train_losses, test_losses = [], []
+        train_losses, test_losses = [], []
 
-    for epoch in range(1, args.epochs+1):
-        train_log = train(args, model, train_loader, optimizer, epoch)
-        test_loss = test(args, model, test_loader)
+        for epoch in range(1, args.epochs+1):
+            train_log = train(args, model, train_loader, optimizer, epoch)
+            test_loss = test(args, model, test_loader)
 
-        train_losses.append(train_log)
-        test_losses.append(test_loss)
+            train_losses.append(train_log)
+            test_losses.append(test_loss)
 
-    if args.save:
-        torch.save(model.state_dict(), f"vae/{args.folder_name}_models/{args.save_name}_model.pt")
+        if args.save:
+            torch.save(model.state_dict(), f"vae/{args.folder_name}_models/{args.save_name}_model.pt")
 
-    paint_losses(args, np.ravel(train_losses), test_losses, train_loader, test_loader)
+        paint_losses(args, np.ravel(train_losses), test_losses, train_loader, test_loader)
 
-    mean, var = 0., 1.
-    generate_graph(args, model, mean, var)
+    else:
+        model.load_state_dict(torch.load(f"vae/{args.folder_name}_models/{args.save_name}_model.pt"))
+        model.eval()
+
+    generate_graph(args, model, number=args.print_number)
 
     main_total = time()-main_time
     main_days = int(main_total // 86400)
