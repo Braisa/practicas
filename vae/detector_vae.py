@@ -13,7 +13,7 @@ import argparse
 from scipy.signal.windows import gaussian
 
 class VAE(nn.Module):
-    def __init__(self, latent_dim=8):
+    def __init__(self, latent_dim=12):
         super(VAE, self).__init__()
         self.latent_dim = latent_dim
         self.encoder = nn.Sequential(
@@ -138,7 +138,7 @@ def generate_graph(args, model, number=1):
         ax.set_ylim(bottom=0)
 
         ax.xaxis.set_major_locator(plt.MultipleLocator(base=33))
-        ax.xaxis.set_minor_locator(plt.MultipleLocator(1))
+        #ax.xaxis.set_minor_locator(plt.MultipleLocator(1))
 
     fig.supxlabel("Detector position")
     fig.supylabel("Photon count")
