@@ -79,7 +79,7 @@ def loss_function(args, output, target):
     mse_loss = nn.functional.mse_loss(x, target)
     kld_loss = -.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
-    return 2 * (kld_loss + args.recon_loss_weight * (mse_loss - kld_loss))
+    return mse_loss + args.beta * kld_loss
 
 def train(args, model, loader, optimizer, epoch, no_print=False):
     initial_time = time()
@@ -132,7 +132,7 @@ def paint_losses(args, train_losses, test_losses, train_loader, test_loader):
     
     fig.savefig(f"vae/{args.folder_name}_figs/{args.save_name}_losses.pdf", dpi=300, bbox_inches="tight")
 
-def generate_ax(args, model, ax, spots, minor=False):    
+def generate_ax(args, model, ax, spots, minor=False):
     model.eval()
     with torch.no_grad():
         counts = model.Decoder(torch.randn(model.latent_dim))
@@ -189,8 +189,8 @@ def create_parser():
                         help="input optimizer (default=Adam)")
     parser.add_argument("--seed", type=int, default=1,
                         help="input random seed (default=1)")
-    parser.add_argument("--save", type=bool, default=False,
-                        help="input whether to save model (default=False)")
+    parser.add_argument("--save", type=bool, default=True,
+                        help="input whether to save model (default=True)")
     parser.add_argument("--load", type=bool, default=False,
                         help="enable load mode, loading from save-name (default=False)")
     parser.add_argument("--print-number", type=int, default=1,
@@ -199,8 +199,8 @@ def create_parser():
                         help="input latent space dimensionality (default=8)")
     parser.add_argument("--hidden-dim", type=int, default=32,
                         help="input hidden layers dimensionality (default=32)")
-    parser.add_argument("--recon-loss-weight", type=float, default=.5,
-                        help="input reconstruction loss weight (default=0.5)")
+    parser.add_argument("--beta", type=float, default=.5,
+                        help="input kldiv loss weight (default=0.5)")
     
     return parser
 
@@ -213,7 +213,8 @@ def main():
 
     torch.manual_seed(args.seed)
 
-    enc, dec = Encoder(132, args.hidden_dim, args.latent_dim), Decoder(args.latent_dim, args.hidden_dim, 132)
+    enc = Encoder(input_dim=132, hidden_dim=args.hidden_dim, latent_dim=args.latent_dim)
+    dec = Decoder(latent_dim=args.latent_dim, hidden_dim=args.hidden_dim, output_dim=132)
     model = VAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim)
     if not args.load:
         df = pd.DataFrame(pd.read_pickle("vae/simulated_events.pickle"))
