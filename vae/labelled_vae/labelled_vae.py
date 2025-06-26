@@ -74,7 +74,8 @@ class DetectorDataset(Dataset):
         return len(self.counts)
     
     def __getitem__(self, index):
-        return self.counts[index], (self.L[index], self.p[index], self.x[index], self.y[index])
+        label = torch.tensor((self.L[index], self.p[index], self.x[index], self.y[index]))
+        return self.counts[index], label
 
 def loss_function(args, output, target):
     x, mu, logvar = output
@@ -223,16 +224,16 @@ def main():
 
     n_det, n_lab = 132, 4
 
-    enc = Encoder(input_dim=n_det+n_lab, hidden_dim=args.hidden_dim, latent_dim=args.latent_dim+n_lab)
+    enc = Encoder(input_dim=n_det+n_lab, hidden_dim=args.hidden_dim, latent_dim=args.latent_dim)
     dec = Decoder(latent_dim=args.latent_dim+n_lab, hidden_dim=args.hidden_dim, output_dim=n_det)
     model = VAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim)
     if not args.load:
         df = pd.DataFrame(pd.read_pickle("vae/simulated_events.pickle"))
-        photon_counts = torch.tensor(list(df["nphotons"].values))
-        Ls = torch.tensor(list(df["dcol"].values))
-        ps = torch.tensor(list(df["p"].values))
-        xs = torch.tensor(list(df["x"].values))
-        ys = torch.tensor(list(df["y"].values))
+        photon_counts = torch.tensor(list(df["nphotons"].values), dtype=torch.float)
+        Ls = torch.tensor(list(df["dcol"].values), dtype=torch.float)
+        ps = torch.tensor(list(df["p"].values), dtype=torch.float)
+        xs = torch.tensor(list(df["x"].values), dtype=torch.float)
+        ys = torch.tensor(list(df["y"].values), dtype=torch.float)
         
         train_counts, test_counts = train_test_split(photon_counts, test_size=.2, random_state=args.seed)
         train_Ls, test_Ls = train_test_split(Ls, test_size=.2, random_state=args.seed)
