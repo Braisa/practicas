@@ -3,14 +3,11 @@ import torch.nn as nn # type: ignore
 from torchvision import transforms, datasets #type: ignore
 from torch.utils.data import Dataset, DataLoader #type: ignore
 from sklearn.model_selection import train_test_split # type: ignore
-from sklearn.metrics import accuracy_score # type: ignore
 import matplotlib.pyplot as plt
-from utils.early_stopper import EarlyStopper
 from time import time
 import numpy as np
 import pandas as pd # type: ignore
 import argparse
-from scipy.signal.windows import gaussian
 
 class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, latent_dim):
@@ -24,8 +21,9 @@ class Encoder(nn.Module):
         self.mean_layer = nn.Linear(hidden_dim, latent_dim)
         self.logvar_layer = nn.Linear(hidden_dim, latent_dim)
     
-    def forward(self, x):
-        x = self.encoding_layers(x)
+    def forward(self, x, l):
+        total_input = torch.cat((x,l), dim=1)
+        x = self.encoding_layers(total_input)
         mean, logvar = self.mean_layer(x), self.logvar_layer(x)
         return mean, logvar
 
@@ -41,37 +39,42 @@ class Decoder(nn.Module):
             nn.ReLU()
         )
     
-    def forward(self, x):
-        x = self.decoding_layers(x)
+    def forward(self, z, l):
+        total_input = torch.cat((z,l), dim=1)
+        x = self.decoding_layers(total_input)
         return x
 
 class VAE(nn.Module):
-    def __init__(self, Encoder, Decoder, latent_dim=8):
+    def __init__(self, Encoder, Decoder, latent_dim=6):
         super(VAE, self).__init__()
         self.latent_dim = latent_dim
         self.Encoder = Encoder
         self.Decoder = Decoder
-
-    def reparameterization(self, mean, var):
+    
+    def reparameterize(self, mean, var):
         epsilon = torch.randn_like(var)
         z = mean + var * epsilon
         return z
 
-    def forward(self, x):
-        mean, logvar = self.Encoder(x)
-        z = self.reparameterization(mean, torch.exp(.5*logvar))
-        t = self.Decoder(z)
+    def forward(self, x, l):
+        mean, logvar = self.Encoder(x, l)
+        z = self.reparameterize(mean, torch.exp(.5*logvar))
+        t = self.Decoder(z, l)
         return t, mean, logvar
 
 class DetectorDataset(Dataset):
-    def __init__(self, counts):
-        self.data = counts
+    def __init__(self, counts, L, p, x, y):
+        self.counts = counts
+        self.L = L
+        self.p = p
+        self.x = x
+        self.y = y
     
     def __len__(self):
-        return len(self.data)
+        return len(self.counts)
     
     def __getitem__(self, index):
-        return self.data[index]
+        return self.counts[index], (self.L[index], self.p[index], self.x[index], self.y[index])
 
 def loss_function(args, output, target):
     x, mu, logvar = output
@@ -85,9 +88,9 @@ def train(args, model, loader, optimizer, epoch, no_print=False):
     initial_time = time()
     model.train()
     train_losses = []
-    for batch_index, counts in enumerate(loader):
+    for batch_index, (counts, labels) in enumerate(loader):
         optimizer.zero_grad()
-        output = model(counts)
+        output = model(counts, labels)
         loss = loss_function(args, output, counts)
         loss.backward()
         optimizer.step()
@@ -104,8 +107,8 @@ def test(args, model, loader, no_print=False):
     model.eval()
     losses = []
     with torch.no_grad():
-        for batch_index, counts in enumerate(loader):
-            output = model(counts)
+        for batch_index, (counts, labels) in enumerate(loader):
+            output = model(counts, labels)
             losses.append(loss_function(args, output, counts).item())
             if not no_print:
                 print(f"Testing progress [{batch_index*len(counts)}/{len(loader.dataset)}] {100.*batch_index*len(counts)/len(loader.dataset):.2f}%", end="\r")
@@ -135,7 +138,12 @@ def paint_losses(args, train_losses, test_losses, train_loader, test_loader):
 def generate_ax(args, model, ax, spots, minor=False):
     model.eval()
     with torch.no_grad():
-        counts = model.Decoder(torch.randn(model.latent_dim))
+        z = torch.randn(model.latent_dim)
+        L = 5 + 45 * np.random.rand()
+        p = 50 * np.random.rand()
+        x = -4000 + 8000 * np.random.rand()
+        y = -4000 + 8000 * np.random.rand()
+        counts = model.Decoder(z, (L,p,x,y))
     
     ax.plot(spots, counts, color = "tab:orange")
 
@@ -213,22 +221,32 @@ def main():
 
     torch.manual_seed(args.seed)
 
-    enc = Encoder(input_dim=132, hidden_dim=args.hidden_dim, latent_dim=args.latent_dim)
-    dec = Decoder(latent_dim=args.latent_dim, hidden_dim=args.hidden_dim, output_dim=132)
+    n_det, n_lab = 132, 4
+
+    enc = Encoder(input_dim=n_det+n_lab, hidden_dim=args.hidden_dim, latent_dim=args.latent_dim+n_lab)
+    dec = Decoder(latent_dim=args.latent_dim+n_lab, hidden_dim=args.hidden_dim, output_dim=n_det)
     model = VAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim)
     if not args.load:
         df = pd.DataFrame(pd.read_pickle("vae/simulated_events.pickle"))
-        photon_counts = torch.tensor(list(df[df.columns[-1]].values))
+        photon_counts = torch.tensor(list(df["nphotons"].values))
+        Ls = torch.tensor(list(df["dcol"].values))
+        ps = torch.tensor(list(df["p"].values))
+        xs = torch.tensor(list(df["x"].values))
+        ys = torch.tensor(list(df["y"].values))
         
         train_counts, test_counts = train_test_split(photon_counts, test_size=.2, random_state=args.seed)
+        train_Ls, test_Ls = train_test_split(Ls, test_size=.2, random_state=args.seed)
+        train_ps, test_ps = train_test_split(ps, test_size=.2, random_state=args.seed)
+        train_xs, test_xs = train_test_split(xs, test_size=.2, random_state=args.seed)
+        train_ys, test_ys = train_test_split(ys, test_size=.2, random_state=args.seed)
 
         train_loader = DataLoader(
-            DetectorDataset(train_counts),
+            DetectorDataset(train_counts, train_Ls, train_ps, train_xs, train_ys),
             batch_size=args.train_batch_size, shuffle=True
         )
 
         test_loader = DataLoader(
-            DetectorDataset(test_counts),
+            DetectorDataset(test_counts, test_Ls, test_ps, test_xs, test_ys),
             batch_size=args.test_batch_size, shuffle=True
         )
         print("Data loaded")
@@ -241,7 +259,7 @@ def main():
 
         train_losses, test_losses = [], []
         print("Training start")
-        for epoch in range(1, args.epochs+1):
+        for epoch in range(1, 1+args.epochs):
             train_log = train(args, model, train_loader, optimizer, epoch)
             test_loss = test(args, model, test_loader)
 
