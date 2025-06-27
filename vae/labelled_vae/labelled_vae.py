@@ -14,6 +14,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.encoding_layers = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU()
@@ -32,6 +33,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.decoding_layers = nn.Sequential(
             nn.Linear(latent_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
@@ -39,10 +41,10 @@ class Decoder(nn.Module):
             nn.ReLU()
         )
     
-    def forward(self, z, l):
-        total_input = torch.cat((z,l), dim=1)
-        x = self.decoding_layers(total_input)
-        return x
+    def forward(self, z, l, dim=1):
+        total_input = torch.cat((z,l), dim=dim)
+        t = self.decoding_layers(total_input)
+        return t
 
 class VAE(nn.Module):
     def __init__(self, Encoder, Decoder, latent_dim=6):
@@ -74,13 +76,22 @@ class DetectorDataset(Dataset):
         return len(self.counts)
     
     def __getitem__(self, index):
-        label = torch.tensor((self.L[index], self.p[index], self.x[index], self.y[index]))
-        return self.counts[index], label
+        sample = {
+            "counts" : self.counts[index],
+            "labels" : torch.tensor((
+                self.L[index],
+                self.p[index],
+                self.x[index],
+                self.y[index]
+            ), dtype=torch.float)
+        }
 
-def loss_function(args, output, target):
-    x, mu, logvar = output
+        return sample
 
-    mse_loss = nn.functional.mse_loss(x, target)
+def loss_function(args, output, target_counts, target_labels):
+    t, mu, logvar = output
+
+    mse_loss = nn.functional.mse_loss(t, torch.cat((target_counts, target_labels), dim=1))
     kld_loss = -.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
     return mse_loss + args.beta * kld_loss
@@ -89,15 +100,15 @@ def train(args, model, loader, optimizer, epoch, no_print=False):
     initial_time = time()
     model.train()
     train_losses = []
-    for batch_index, (counts, labels) in enumerate(loader):
+    for batch_index, batch in enumerate(loader):
         optimizer.zero_grad()
-        output = model(counts, labels)
-        loss = loss_function(args, output, counts)
+        output = model(batch["counts"], batch["labels"])
+        loss = loss_function(args, output, batch["counts"], batch["labels"])
         loss.backward()
         optimizer.step()
         train_losses.append(loss.item())
         if not no_print and batch_index % args.logging_interval == 0:
-            print(f"Training epoch {epoch} [{batch_index*len(counts)}/{len(loader.dataset)}]\tLoss: {loss.item():.6f}", end="\r")
+            print(f"Training epoch {epoch} [{batch_index*len(batch["counts"])}/{len(loader.dataset)}]\tLoss: {loss.item():.6f}", end="\r")
     if not no_print:
         print(f"\033[K", end="\r")
         print(f"Training epoch {epoch} complete\tAverage loss: {np.mean(train_losses):.6f}\t({time()-initial_time:.2f}s elapsed)")
@@ -108,11 +119,11 @@ def test(args, model, loader, no_print=False):
     model.eval()
     losses = []
     with torch.no_grad():
-        for batch_index, (counts, labels) in enumerate(loader):
-            output = model(counts, labels)
-            losses.append(loss_function(args, output, counts).item())
+        for batch_index, batch in enumerate(loader):
+            output = model(batch["counts"], batch["labels"])
+            losses.append(loss_function(args, output, batch["counts"], batch["labels"]).item())
             if not no_print:
-                print(f"Testing progress [{batch_index*len(counts)}/{len(loader.dataset)}] {100.*batch_index*len(counts)/len(loader.dataset):.2f}%", end="\r")
+                print(f"Testing progress [{batch_index*len(batch["counts"])}/{len(loader.dataset)}] {100.*batch_index*len(batch["counts"])/len(loader.dataset):.2f}%", end="\r")
     test_loss = np.mean(losses)
     if not no_print:
         print(f"\033[K", end="\r")
@@ -136,17 +147,15 @@ def paint_losses(args, train_losses, test_losses, train_loader, test_loader):
     
     fig.savefig(f"vae/{args.folder_name}_figs/{args.save_name}_losses.pdf", dpi=300, bbox_inches="tight")
 
-def generate_ax(args, model, ax, spots, minor=False):
-    model.eval()
-    with torch.no_grad():
-        z = torch.randn(model.latent_dim)
-        L = 5 + 45 * np.random.rand()
-        p = 50 * np.random.rand()
-        x = -4000 + 8000 * np.random.rand()
-        y = -4000 + 8000 * np.random.rand()
-        counts = model.Decoder(z, (L,p,x,y))
-    
+def generate_ax(args, model, ax, spots, counts, labels, minor=False):
     ax.plot(spots, counts, color = "tab:orange")
+
+    """
+    title_string, label_names = "", ("L", "p", "x", "y")
+    for (label, name) in zip(labels, label_names):
+        title_string += f" {name}={label} "
+    ax.set_title(title_string)
+    """
 
     ax.set_xlim(left=1, right=33*4)
     ax.set_ylim(bottom=0)
@@ -161,11 +170,24 @@ def generate_graphs(args, model, number=1):
 
     spots = np.arange(1, 1+33*4)
 
+    model.eval()
+    with torch.no_grad():
+        zs = torch.randn(args.print_number**2, model.latent_dim)
+        Ls = 5 + 45 * np.random.rand(args.print_number**2)
+        ps = 50 * np.random.rand(args.print_number**2)
+        xs = -4000 + 8000 * np.random.rand(args.print_number**2)
+        ys = -4000 + 8000 * np.random.rand(args.print_number**2)
+        labs = torch.tensor((Ls,ps,xs,ys), dtype=torch.float).permute(1,0)
+        t = model.Decoder(zs, labs, dim=1)
+
     if number == 1:
-        generate_ax(args, model, axs, spots, minor=True)
+        t = t[0]
+        counts, labels = t[:args.n_det], t[args.n_det:]
+        generate_ax(args, model, axs, spots, counts, labels, minor=True)
     else:
-        for ax in axs.ravel():
-            generate_ax(args, model, ax, spots, minor=False)
+        for (ax, t_ax) in zip(axs.ravel(), t):
+            counts_ax, labels_ax = t_ax[:args.n_det], t_ax[args.n_det:]
+            generate_ax(args, model, ax, spots, counts_ax, labels_ax, minor=False)
 
     fig.supxlabel("Detector position")
     fig.supylabel("Photon count")
@@ -186,6 +208,8 @@ def create_parser():
                         help="input training batch size (default=64)")
     parser.add_argument("--test-batch-size", type=int, default=1000,
                         help="input testing batch size (default=1000)")
+    parser.add_argument("--element-cutoff", type=int, default=5000,
+                        help="input dataset element cutoff (default=5000)") # sufficient memory -> default=-1
     parser.add_argument("--epochs", type=int, default=100,
                         help="input number of epochs (default=100)")
     parser.add_argument("--learning-rate", type=float, default=1e-3,
@@ -204,12 +228,14 @@ def create_parser():
                         help="enable load mode, loading from save-name (default=False)")
     parser.add_argument("--print-number", type=int, default=1,
                         help="input printed outputs number, which will be squared (default=1)")
-    parser.add_argument("--latent-dim", type=int, default=8,
+    parser.add_argument("--latent-dim", type=int, default=3,
                         help="input latent space dimensionality (default=8)")
     parser.add_argument("--hidden-dim", type=int, default=32,
                         help="input hidden layers dimensionality (default=32)")
     parser.add_argument("--beta", type=float, default=.5,
                         help="input kldiv loss weight (default=0.5)")
+    parser.add_argument("--n-det", type=int, default=132)
+    parser.add_argument("--n-lab", type=int, default=4)
     
     return parser
 
@@ -222,18 +248,16 @@ def main():
 
     torch.manual_seed(args.seed)
 
-    n_det, n_lab = 132, 4
-
-    enc = Encoder(input_dim=n_det+n_lab, hidden_dim=args.hidden_dim, latent_dim=args.latent_dim)
-    dec = Decoder(latent_dim=args.latent_dim+n_lab, hidden_dim=args.hidden_dim, output_dim=n_det)
+    enc = Encoder(input_dim=args.n_det+args.n_lab, hidden_dim=args.hidden_dim, latent_dim=args.latent_dim)
+    dec = Decoder(latent_dim=args.latent_dim+args.n_lab, hidden_dim=args.hidden_dim, output_dim=args.n_det+args.n_lab)
     model = VAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim)
     if not args.load:
         df = pd.DataFrame(pd.read_pickle("vae/simulated_events.pickle"))
-        photon_counts = torch.tensor(list(df["nphotons"].values), dtype=torch.float)
-        Ls = torch.tensor(list(df["dcol"].values), dtype=torch.float)
-        ps = torch.tensor(list(df["p"].values), dtype=torch.float)
-        xs = torch.tensor(list(df["x"].values), dtype=torch.float)
-        ys = torch.tensor(list(df["y"].values), dtype=torch.float)
+        photon_counts = torch.tensor(list(df["nphotons"].values)[:args.element_cutoff], dtype=torch.float)
+        Ls = torch.tensor(list(df["dcol"].values)[:args.element_cutoff], dtype=torch.float)
+        ps = torch.tensor(list(df["p"].values)[:args.element_cutoff], dtype=torch.float)
+        xs = torch.tensor(list(df["x"].values)[:args.element_cutoff], dtype=torch.float)
+        ys = torch.tensor(list(df["y"].values)[:args.element_cutoff], dtype=torch.float)
         
         train_counts, test_counts = train_test_split(photon_counts, test_size=.2, random_state=args.seed)
         train_Ls, test_Ls = train_test_split(Ls, test_size=.2, random_state=args.seed)
