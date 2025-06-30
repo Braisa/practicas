@@ -213,10 +213,10 @@ def compare_graph(args, model, true):
 
     spots = np.arange(1, 1+33*4)
 
-    L_truth = true["Ls"] == args.gen_values[0]
-    p_truth = true["ps"] == args.gen_values[1]
-    x_truth = true["xs"] == args.gen_values[2]
-    y_truth = true["ys"] == args.gen_values[3]
+    L_truth = true["Ls"] == np.unique(true["Ls"])[args.gen_values[0]]
+    p_truth = true["ps"] == np.unique(true["ps"])[args.gen_values[1]]
+    x_truth = true["xs"] == np.unique(true["xs"])[args.gen_values[2]]
+    y_truth = true["ys"] == np.unique(true["ys"])[args.gen_values[3]]
 
     index = np.where(L_truth & p_truth & x_truth & y_truth)[0][0]
 
@@ -292,8 +292,8 @@ def create_parser():
                         help="input kldiv loss weight (default=0.5)")
     parser.add_argument("--n-det", type=int, default=132)
     parser.add_argument("--n-lab", type=int, default=4)
-    parser.add_argument("--gen-values", type=float, nargs="+",
-                        help="input (L,p,x,y) values for generated output")
+    parser.add_argument("--gen-values", type=int, nargs="+",
+                        help="input (L,p,x,y) values for generated output, as an index on the unique list")
     
     return parser
 
