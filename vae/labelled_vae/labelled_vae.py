@@ -165,7 +165,6 @@ def generate_ax(args, model, ax, spots, counts, labels, minor=False):
         ax.xaxis.set_minor_locator(plt.MultipleLocator(1))
 
 def generate_graphs(args, model, number=1):
-
     fig, axs = plt.subplots(number, number, figsize=(1.5*number,1.5*number), sharex="all", layout="compressed")
 
     spots = np.arange(1, 1+33*4)
@@ -193,6 +192,61 @@ def generate_graphs(args, model, number=1):
     fig.supylabel("Photon count")
 
     fig.savefig(f"vae/{args.folder_name}_gen/{args.save_name}_gen.pdf", dpi=300, bbox_inches="tight")
+
+def compare_ax(args, model, ax, spots, true_counts, true_labels, gen_counts, gen_labels, minor=False):
+
+    ax.plot(spots, true_counts, color = "tab:blue")
+    ax.plot(spots, gen_counts, color = "tab:orange")
+
+    ax.set_xlim(left=1, right=33*4)
+    ax.set_ylim(bottom=0)
+
+    ax.xaxis.set_major_locator(plt.MultipleLocator(base=33))
+    if minor:
+        ax.xaxis.set_minor_locator(plt.MultipleLocator(1))
+    
+    ax.set_xlabel("Detector position")
+    ax.set_ylabel("Photon count")
+
+def compare_graph(args, model, true):
+    fig, ax = plt.subplots(figsize=(5,5))
+
+    spots = np.arange(1, 1+33*4)
+
+    L_truth = true["Ls"] == args.gen_values[0]
+    p_truth = true["ps"] == args.gen_values[1]
+    x_truth = true["xs"] == args.gen_values[2]
+    y_truth = true["ys"] == args.gen_values[3]
+
+    index = np.where(L_truth & p_truth & x_truth & y_truth)[0][0]
+
+    true_counts = true["counts"][index]
+    true_L = true["Ls"][index].item()
+    true_p = true["ps"][index].item()
+    true_x = true["xs"][index].item()
+    true_y = true["ys"][index].item()
+    true_labels = (true_L, true_p, true_x, true_y)
+    true_labels_tensor = torch.tensor(true_labels, dtype=torch.float).unsqueeze(0)
+
+    model.eval()
+    with torch.no_grad():
+        zs = torch.randn(1, model.latent_dim)
+        t = model.Decoder(zs, true_labels_tensor, dim=1)[0]
+
+    gen_counts, gen_labels = t[:args.n_det], t[args.n_det:]
+
+    compare_ax(args, model, ax, spots, true_counts, true_labels, gen_counts, gen_labels, minor=True)
+
+    true_title, gen_title = "", ""
+    label_names = ("L", "p", "x", "y")
+    for (true_l, gen_l, name) in zip(true_labels, gen_counts, label_names):
+        true_title += f" {name}={true_l} "
+        gen_title += f" {name}={gen_l} "
+    
+    ax.set_title(gen_title, color="tab:orange")
+    fig.suptitle(true_title, color="tab:blue")
+
+    fig.savefig(f"vae/{args.folder_name}_gen/{args.save_name}_comp.pdf", dpi=300, bbox_inches="tight")
 
 def create_parser():
     parser = argparse.ArgumentParser(description="Variational Autoencoder")
@@ -228,6 +282,8 @@ def create_parser():
                         help="enable load mode, loading from save-name (default=False)")
     parser.add_argument("--print-number", type=int, default=1,
                         help="input printed outputs number, which will be squared (default=1)")
+    parser.add_argument("--print-type", type=str, default="gen",
+                        help="print generated graphs (default, gen) or comparison (comp)")
     parser.add_argument("--latent-dim", type=int, default=3,
                         help="input latent space dimensionality (default=8)")
     parser.add_argument("--hidden-dim", type=int, default=32,
@@ -236,6 +292,8 @@ def create_parser():
                         help="input kldiv loss weight (default=0.5)")
     parser.add_argument("--n-det", type=int, default=132)
     parser.add_argument("--n-lab", type=int, default=4)
+    parser.add_argument("--gen-values", type=float, nargs="+",
+                        help="input (L,p,x,y) values for generated output")
     
     return parser
 
@@ -304,7 +362,24 @@ def main():
         model.eval()
         print("Model loaded")
 
-    generate_graphs(args, model, number=args.print_number)
+    if args.print_type == "gen":
+        generate_graphs(args, model, number=args.print_number)
+    elif args.print_type == "comp":
+        df = pd.DataFrame(pd.read_pickle("vae/simulated_events.pickle"))
+        photon_counts = torch.tensor(list(df["nphotons"].values)[:args.element_cutoff], dtype=torch.float)
+        Ls = torch.tensor(list(df["dcol"].values)[:args.element_cutoff], dtype=torch.float)
+        ps = torch.tensor(list(df["p"].values)[:args.element_cutoff], dtype=torch.float)
+        xs = torch.tensor(list(df["x"].values)[:args.element_cutoff], dtype=torch.float)
+        ys = torch.tensor(list(df["y"].values)[:args.element_cutoff], dtype=torch.float)
+        true = {
+            "counts" : photon_counts,
+            "Ls" : Ls,
+            "ps" : ps,
+            "xs" : xs,
+            "ys" : ys
+        }
+        print("Data loaded")
+        compare_graph(args, model, true)
     print("Graphs generated")
 
     main_total = time()-main_time
