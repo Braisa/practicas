@@ -15,9 +15,9 @@ class Encoder(nn.Module):
         self.encoding_layers = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU()
+            nn.LeakyReLU()
         )
         self.mean_layer = nn.Linear(hidden_dim, latent_dim)
         self.logvar_layer = nn.Linear(hidden_dim, latent_dim)
@@ -34,11 +34,11 @@ class Decoder(nn.Module):
         self.decoding_layers = nn.Sequential(
             nn.Linear(latent_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(hidden_dim, output_dim),
-            nn.ReLU()
+            nn.LeakyReLU()
         )
     
     def forward(self, z, l, dim=1):
@@ -195,8 +195,8 @@ def generate_graphs(args, model, number=1):
 
 def compare_ax(args, model, ax, spots, true_counts, true_labels, gen_counts, gen_labels, minor=False):
 
-    ax.plot(spots, true_counts, color = "tab:blue")
-    ax.plot(spots, gen_counts, color = "tab:orange")
+    ax.plot(spots, true_counts, ls="solid", color = "tab:blue")
+    ax.plot(spots, gen_counts, ls="dashed", color = "tab:orange")
 
     ax.set_xlim(left=1, right=33*4)
     ax.set_ylim(bottom=0)
@@ -267,7 +267,7 @@ def create_parser():
     parser.add_argument("--epochs", type=int, default=100,
                         help="input number of epochs (default=100)")
     parser.add_argument("--learning-rate", type=float, default=1e-3,
-                        help="input learning rate (default=0.01)")
+                        help="input learning rate (default=0.001)")
     parser.add_argument("--random-seed", type=int, default=1,
                         help="input random seed (default=1)")
     parser.add_argument("--logging-interval", type=int, default=50,
