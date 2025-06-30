@@ -14,10 +14,10 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.encoding_layers = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
+            #nn.BatchNorm1d(hidden_dim),
+            nn.Sigmoid(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU()
+            nn.Sigmoid()
         )
         self.mean_layer = nn.Linear(hidden_dim, latent_dim)
         self.logvar_layer = nn.Linear(hidden_dim, latent_dim)
@@ -33,12 +33,12 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.decoding_layers = nn.Sequential(
             nn.Linear(latent_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(),
+            #nn.BatchNorm1d(hidden_dim),
+            nn.Sigmoid(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.LeakyReLU(),
+            nn.Sigmoid(),
             nn.Linear(hidden_dim, output_dim),
-            nn.LeakyReLU()
+            nn.Sigmoid()
         )
     
     def forward(self, z, l, dim=1):
@@ -87,6 +87,26 @@ class DetectorDataset(Dataset):
         }
 
         return sample
+
+class Scaler():
+    def __init__(self, data_names, data_min_values, data_max_values):
+        data_values = []
+        for data_min_value, data_max_value in zip(data_min_values, data_max_values):
+            data_values.append({"min":data_min_value, "max":data_max_value})
+        self.scaling_data = dict(zip(data_names, data_values))
+    
+    def _get_min_max(self, data_name):
+        return self.scaling_data[data_name]["min"], self.scaling_data[data_name]["max"]
+
+    def downscale(self, data_name, data):
+        min_value, max_value = self._get_min_max(data_name)
+        downscaled_data = (data - min_value)/(max_value - min_value)
+        return downscaled_data
+    
+    def upscale(self, data_name, downscaled_data):
+        min_value, max_value = self._get_min_max(data_name)
+        upscaled_data = min_value + downscaled_data * (max_value - min_value)
+        return upscaled_data
 
 def loss_function(args, output, target_counts, target_labels):
     t, mu, logvar = output
@@ -164,7 +184,7 @@ def generate_ax(args, model, ax, spots, counts, labels, minor=False):
     if minor:
         ax.xaxis.set_minor_locator(plt.MultipleLocator(1))
 
-def generate_graphs(args, model, number=1):
+def generate_graphs(args, scaler, model, number=1):
     fig, axs = plt.subplots(number, number, figsize=(1.5*number,1.5*number), sharex="all", layout="compressed")
 
     spots = np.arange(1, 1+33*4)
@@ -182,10 +202,12 @@ def generate_graphs(args, model, number=1):
     if number == 1:
         t = t[0]
         counts, labels = t[:args.n_det], t[args.n_det:]
+        counts = scaler.upscale("counts", counts)
         generate_ax(args, model, axs, spots, counts, labels, minor=True)
     else:
         for (ax, t_ax) in zip(axs.ravel(), t):
             counts_ax, labels_ax = t_ax[:args.n_det], t_ax[args.n_det:]
+            counts_ax = scaler.upscale("counts", counts_ax)
             generate_ax(args, model, ax, spots, counts_ax, labels_ax, minor=False)
 
     fig.supxlabel("Detector position")
@@ -208,7 +230,7 @@ def compare_ax(args, model, ax, spots, true_counts, true_labels, gen_counts, gen
     ax.set_xlabel("Detector position")
     ax.set_ylabel("Photon count")
 
-def compare_graph(args, model, true):
+def compare_graph(args, scaler, model, true):
     fig, ax = plt.subplots(figsize=(5,5))
 
     spots = np.arange(1, 1+33*4)
@@ -234,11 +256,17 @@ def compare_graph(args, model, true):
         t = model.Decoder(zs, true_labels_tensor, dim=1)[0]
 
     gen_counts, gen_labels = t[:args.n_det], t[args.n_det:]
+    
+    upscaled_gen_counts = scaler.upscale("counts", gen_counts)
 
-    compare_ax(args, model, ax, spots, true_counts, true_labels, gen_counts, gen_labels, minor=True)
+    upscaled_gen_labels = []
+    label_names = ("L", "p", "x", "y")
+    for gen_label, label_name in zip(gen_labels, label_names):
+        upscaled_gen_labels.append(scaler.upscale(label_name, gen_label))
+
+    compare_ax(args, model, ax, spots, true_counts, true_labels, upscaled_gen_counts, upscaled_gen_labels, minor=True)
 
     true_title, gen_title = "", ""
-    label_names = ("L", "p", "x", "y")
     for (true_l, gen_l, name) in zip(true_labels, gen_counts, label_names):
         true_title += f" {name}={true_l} "
         gen_title += f" {name}={gen_l} "
@@ -247,6 +275,12 @@ def compare_graph(args, model, true):
     fig.suptitle(true_title, color="tab:blue")
 
     fig.savefig(f"vae/{args.folder_name}_gen/{args.save_name}_comp.pdf", dpi=300, bbox_inches="tight")
+
+def create_scaler():
+    data_names = ("counts", "L", "p", "x", "y")
+    data_min_values = (0., 5., 10., -4000., -4000.)
+    data_max_values = (905., 50., 50., 4000., 4000.)
+    return Scaler(data_names, data_min_values, data_max_values)
 
 def create_parser():
     parser = argparse.ArgumentParser(description="Variational Autoencoder")
@@ -304,6 +338,8 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
 
+    scaler = create_scaler()
+
     torch.manual_seed(args.seed)
 
     enc = Encoder(input_dim=args.n_det+args.n_lab, hidden_dim=args.hidden_dim, latent_dim=args.latent_dim)
@@ -316,7 +352,13 @@ def main():
         ps = torch.tensor(list(df["p"].values)[:args.element_cutoff], dtype=torch.float)
         xs = torch.tensor(list(df["x"].values)[:args.element_cutoff], dtype=torch.float)
         ys = torch.tensor(list(df["y"].values)[:args.element_cutoff], dtype=torch.float)
-        
+
+        photon_counts = scaler.downscale("counts", photon_counts)
+        Ls = scaler.downscale("L", Ls)
+        ps = scaler.downscale("p", ps)
+        xs = scaler.downscale("x", xs)
+        ys = scaler.downscale("y", ys)
+
         train_counts, test_counts = train_test_split(photon_counts, test_size=.2, random_state=args.seed)
         train_Ls, test_Ls = train_test_split(Ls, test_size=.2, random_state=args.seed)
         train_ps, test_ps = train_test_split(ps, test_size=.2, random_state=args.seed)
@@ -363,7 +405,7 @@ def main():
         print("Model loaded")
 
     if args.print_type == "gen":
-        generate_graphs(args, model, number=args.print_number)
+        generate_graphs(args, scaler, model, number=args.print_number)
     elif args.print_type == "comp":
         df = pd.DataFrame(pd.read_pickle("vae/simulated_events.pickle"))
         photon_counts = torch.tensor(list(df["nphotons"].values)[:args.element_cutoff], dtype=torch.float)
@@ -379,7 +421,7 @@ def main():
             "ys" : ys
         }
         print("Data loaded")
-        compare_graph(args, model, true)
+        compare_graph(args, scaler, model, true)
     print("Graphs generated")
 
     main_total = time()-main_time
