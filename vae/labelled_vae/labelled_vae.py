@@ -14,7 +14,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.encoding_layers = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
             nn.Sigmoid(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Sigmoid()
@@ -33,7 +33,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.decoding_layers = nn.Sequential(
             nn.Linear(latent_dim, hidden_dim),
-            #nn.BatchNorm1d(hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
             nn.Sigmoid(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.Sigmoid(),
@@ -248,12 +248,17 @@ def compare_graph(args, scaler, model, true):
     true_x = true["xs"][index].item()
     true_y = true["ys"][index].item()
     true_labels = (true_L, true_p, true_x, true_y)
-    true_labels_tensor = torch.tensor(true_labels, dtype=torch.float).unsqueeze(0)
+    true_L_down = scaler.downscale("L", true_L)
+    true_p_down = scaler.downscale("p", true_p)
+    true_x_down = scaler.downscale("x", true_x)
+    true_y_down = scaler.downscale("y", true_y)
+    true_labels_down = (true_L_down, true_p_down, true_x_down, true_y_down)
+    true_labels_down_tensor = torch.tensor(true_labels_down, dtype=torch.float).unsqueeze(0)
 
     model.eval()
     with torch.no_grad():
         zs = torch.randn(1, model.latent_dim)
-        t = model.Decoder(zs, true_labels_tensor, dim=1)[0]
+        t = model.Decoder(zs, true_labels_down_tensor, dim=1)[0]
 
     gen_counts, gen_labels = t[:args.n_det], t[args.n_det:]
     
