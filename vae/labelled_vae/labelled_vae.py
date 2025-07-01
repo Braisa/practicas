@@ -265,16 +265,16 @@ def compare_graph(args, scaler, model, true):
     upscaled_gen_counts = scaler.upscale("counts", gen_counts)
 
     upscaled_gen_labels = []
-    label_names = ("L", "p", "x", "y")
+    label_names = list(scaler.scaling_data.keys())[1:]
     for gen_label, label_name in zip(gen_labels, label_names):
         upscaled_gen_labels.append(scaler.upscale(label_name, gen_label))
 
     compare_ax(args, model, ax, spots, true_counts, true_labels, upscaled_gen_counts, upscaled_gen_labels, minor=True)
 
     true_title, gen_title = "", ""
-    for (true_l, gen_l, name) in zip(true_labels, gen_counts, label_names):
-        true_title += f" {name}={true_l} "
-        gen_title += f" {name}={gen_l} "
+    for (true_l, gen_l, name) in zip(true_labels, upscaled_gen_labels, label_names):
+        true_title += f" {name}={true_l:.2f} "
+        gen_title += f" {name}={gen_l:.2f} "
     
     ax.set_title(gen_title, color="tab:orange")
     fig.suptitle(true_title, color="tab:blue")
