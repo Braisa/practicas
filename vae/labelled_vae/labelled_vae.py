@@ -336,6 +336,23 @@ def create_parser():
     
     return parser
 
+def reconstruct_avalanche(args, counts_list):
+    """
+    Expects counts_list to be ordered as (x1, x2, y1, y2).
+    """
+
+    Ns, means, devs = [], [], []
+    for counts in counts_list:
+        Ns.append(torch.sum(counts))
+        means.append(torch.mean(counts))
+        devs.append(np.sqrt(torch.var(counts)))
+    
+    nd = lambda i : Ns[i]/devs[i]
+    avalanche_eq = lambda i, j : ((means[i]*nd(i))+(means[j]*nd(j)))/(nd(i)+nd(j))
+
+    x_avalanche, y_avalanche = avalanche_eq(0,1), avalanche_eq(2,3)
+    return x_avalanche, y_avalanche
+
 def main():
     main_time = time()
     print("Program start")
