@@ -156,7 +156,7 @@ def paint_losses(args, train_losses, test_losses, train_loader, test_loader):
     train_spots = np.arange(1, 1+args.epochs*(1+(len(train_loader.dataset)//args.train_batch_size))) * args.train_batch_size
     test_spots = np.arange(1, 1+len(test_losses)) * len(train_loader.dataset)
 
-    ax.plot(train_spots, train_losses, ls="solid", color="tab:blue", label="Train loss")
+    ax.plot(train_spots[:len(train_losses)], train_losses, ls="solid", color="tab:blue", label="Train loss")
     ax.plot(test_spots, test_losses, ls="None", marker="o", color="tab:orange", label="Test loss")
 
     ax.xaxis.set_major_locator(plt.MultipleLocator(len(train_loader.dataset)))
