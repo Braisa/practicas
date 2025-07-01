@@ -46,9 +46,9 @@ class Decoder(nn.Module):
         t = self.decoding_layers(total_input)
         return t
 
-class VAE(nn.Module):
+class cVAE(nn.Module):
     def __init__(self, Encoder, Decoder, latent_dim=6):
-        super(VAE, self).__init__()
+        super(cVAE, self).__init__()
         self.latent_dim = latent_dim
         self.Encoder = Encoder
         self.Decoder = Decoder
@@ -288,7 +288,7 @@ def create_scaler():
     return Scaler(data_names, data_min_values, data_max_values)
 
 def create_parser():
-    parser = argparse.ArgumentParser(description="Variational Autoencoder")
+    parser = argparse.ArgumentParser(description="Conditional Variational Autoencoder")
     
     # File settings
     parser.add_argument("--folder-name", type=str, default="vae",
@@ -366,7 +366,7 @@ def main():
 
     enc = Encoder(input_dim=args.n_det+args.n_lab, hidden_dim=args.hidden_dim, latent_dim=args.latent_dim)
     dec = Decoder(latent_dim=args.latent_dim+args.n_lab, hidden_dim=args.hidden_dim, output_dim=args.n_det+args.n_lab)
-    model = VAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim)
+    model = cVAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim)
     if not args.load:
         df = pd.DataFrame(pd.read_pickle("vae/simulated_events.pickle"))
         photon_counts = torch.tensor(list(df["nphotons"].values)[:args.element_cutoff], dtype=torch.float)
