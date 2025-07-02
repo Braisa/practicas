@@ -160,18 +160,35 @@ def get_datasets(args, scaler):
     test_dataset = counter_dataset.create_counter_dataset(te_c, te_l, te_p, te_x, te_y)
     return train_dataset, test_dataset
 
-def save_model(args, model, scaler, train_losses, test_losses):
+def save_model(args, model, scaler, train_loader, test_loader, train_losses, test_losses):
     full_path = f"{args.path}/{args.savename}"
     Path(f"{full_path}").mkdir(parents=True, exist_ok=True)
     save_data = {
         "args" : args,
         "scaler" : scaler,
-        "train_losses" : train_losses,
-        "test_losses" : test_losses
+        "loaders" : {
+            "train" : train_loader,
+            "test" : test_loader
+        },
+        "losses" : {
+            "train" : train_losses,
+            "test" : test_losses
+        }
     }
     with open(f"{full_path}/{args.savename}_data", "wb") as handle:
         pickle.dump(save_data, handle)
     torch.save(model.state_dict(), f"{full_path}/{args.savename}_model.pt")
+
+def train_for_epochs(args, model, optimizer, train_loader, test_loader, epochs):
+    if args.print_progress: print("Training start")
+    train_losses, test_losses = [], []
+    for epoch in range(1, 1+args.epochs):
+        train_log = train_epoch(args, model, train_loader, optimizer, epoch)
+        train_losses.append(train_log)
+        test_loss = test(args, model, test_loader, epoch=epoch)
+        test_losses.append(test_loss)
+    if args.print_progress: print("Training end")
+    return train_log, test_losses
 
 def main():
     main_time = time()
@@ -193,16 +210,9 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    if args.print_progress: print("Training start")
-    train_losses, test_losses = [], []
-    for epoch in range(1, 1+args.epochs):
-        train_log = train_epoch(args, model, train_loader, optimizer, epoch)
-        train_losses.append(train_log)
-        test_loss = test(args, model, test_loader, epoch=epoch)
-        test_losses.append(test_loss)
-    if args.print_progress: print("Training end")
+    train_log, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.epochs)
 
-    save_model(args, model, scaler, train_log, test_losses)
+    save_model(args, model, scaler, train_loader, test_loader, train_log, test_losses)
     if args.print_progress: print("Model saved")
 
     main_total = time()-main_time
