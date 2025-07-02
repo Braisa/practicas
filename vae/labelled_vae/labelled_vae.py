@@ -448,7 +448,7 @@ def main():
     if args.print_type == "gen":
         generate_graphs(args, scaler, model, number=args.print_number)
     elif args.print_type == "comp":
-        df = pd.DataFrame(pd.read_pickle("vae/simulated_events.pickle"))
+        df = pd.DataFrame(pd.read_pickle("data/simulated_events.pickle"))
         photon_counts = torch.tensor(list(df["nphotons"].values)[:args.element_cutoff], dtype=torch.float)
         Ls = torch.tensor(list(df["dcol"].values)[:args.element_cutoff], dtype=torch.float)
         ps = torch.tensor(list(df["p"].values)[:args.element_cutoff], dtype=torch.float)
