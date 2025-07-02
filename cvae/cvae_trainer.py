@@ -173,10 +173,11 @@ def save_model(args, model, scaler, train_losses, test_losses):
         pickle.dump(save_data, handle)
     torch.save(model.state_dict(), f"{full_path}/{args.savename}_model.pt")
 
-def main(args):
+def main():
     main_time = time()
-    if args.print_progress: print("Program start")
+    print("Program start")
 
+    args = get_args()
     scaler = counter_dataset.create_counter_scaler()
     
     torch.manual_seed(args.seed)
@@ -209,8 +210,7 @@ def main(args):
     main_hours = int((main_total % 86400) // 3600)
     main_minutes = int(((main_total % 86400) % 3600) // 60)
     main_seconds = int(((main_total % 86400) % 3600) % 60)
-    if args.print_progress: print(f"Program complete ({main_days:02}:{main_hours:02}:{main_minutes:02}:{main_seconds:02} elapsed)")
+    print(f"Program complete ({main_days:02}:{main_hours:02}:{main_minutes:02}:{main_seconds:02} elapsed)")
 
 if __name__ == "__main__":
-    args = get_args()
-    main(args)
+    main()
