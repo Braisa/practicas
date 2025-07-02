@@ -8,6 +8,8 @@ from time import time
 import numpy as np
 import pandas as pd # type: ignore
 import argparse
+from pathlib import Path
+import pickle
 
 class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, latent_dim):
@@ -295,6 +297,8 @@ def create_parser():
                         help="input folder for storing figures (default=vae)")
     parser.add_argument("--save-name", type=str, default="vae",
                         help="input file save name (default=vae)")
+    parser.add_argument("--save-path", type=str, default="vae/vae_models",
+                        help="input model save path (default=vae/vae_models)")
 
     # Training settings
     parser.add_argument("--train-batch-size", type=int, default=64,
@@ -352,6 +356,21 @@ def reconstruct_avalanche(args, counts_list):
 
     x_avalanche, y_avalanche = avalanche_eq(0,1), avalanche_eq(2,3)
     return x_avalanche, y_avalanche
+
+def save_model(args, model, scaler):
+
+    full_path = f"{args.save_path}/{args.save_name}"
+
+    Path(f"{full_path}").mkdir(parents=True, exist_ok=True)
+
+    save_data = {
+        "args" : args,
+        "scaler" : scaler
+    }
+
+    with open(f"{full_path}/{args.save_name}_data", "wb") as handle:
+        pickle.dump(save_data, handle)
+    torch.save(model.state_dict(), f"{full_path}/{args.save_name}_model.pt")
 
 def main():
     main_time = time()
@@ -415,7 +434,7 @@ def main():
         print("Training end")
 
         if args.save:
-            torch.save(model.state_dict(), f"vae/{args.folder_name}_models/{args.save_name}_model.pt")
+            save_model(args, model, scaler)
             print("Model saved")
         
         paint_losses(args, np.ravel(train_losses), test_losses, train_loader, test_loader)

@@ -15,9 +15,17 @@ def get_args():
     parser = argparse.ArgumentParser(description="cVAE Figure Printer")
     
     # Mandatory arguments
+    parser.add_argument("model", type=str,
+                        help="input model state save path")
     parser.add_argument("savename", type=str,
                         help="input save name for printed figure")
     
+    # Model arguments
+    parser.add_argument("--latent-dim", type=int, default=3,
+                        help="input model latent dimensionality (default=3)")
+    parser.add_argument("--hidden-dim", type=int, default=32,
+                        help="input model hidden dimensionality (default=32)")
+
     # Figure arguments
     parser.add_argument("--dpi", type=int, default=300,
                         help="input saved figure dpi (default=300)")
@@ -48,6 +56,8 @@ def main():
     args = get_args()
     scaler = create_scaler()
     data = load_data(args, scaler)
+
+    model = cVAE()
 
 
 if __name__ == "__main__":
