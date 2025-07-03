@@ -104,10 +104,10 @@ def test(args, model, loader, epoch=None):
 def get_args():
     parser = argparse.ArgumentParser(description="cVAE Trainer")
     # File settings
-    parser.add_argument("path", type=str, default="cvae/saves",
-                        help="Parent folder path (default=cvae/saves)")
     parser.add_argument("savename", type=str, default="test",
                         help="Save name (default=test)")
+    parser.add_argument("--path", type=str, default="cvae/saves",
+                        help="Parent folder path (default=cvae/saves)")
     # Model settings
     parser.add_argument("--nonlabel-input-dim", "-nlid", type=int, default=132,
                         help="Non-label input size (default=132)")
@@ -142,7 +142,7 @@ def get_args():
     args = parser.parse_args()
     return args
 
-def get_datasets(args, scaler):
+def get_datasets(args, scaler, return_full_data=True):
     df = pd.DataFrame(pd.read_pickle(args.data_path))
     counts = scaler.downscale("counts", torch.tensor(list(df["nphotons"].values), dtype=torch.float))
     Ls = scaler.downscale("L", torch.tensor(list(df["dcol"].values), dtype=torch.float))
@@ -158,14 +158,23 @@ def get_datasets(args, scaler):
 
     train_dataset = counter_dataset.create_counter_dataset(tr_c, tr_l, tr_p, tr_x, tr_y)
     test_dataset = counter_dataset.create_counter_dataset(te_c, te_l, te_p, te_x, te_y)
-    return train_dataset, test_dataset
+    if not return_full_data:
+        return train_dataset, test_dataset
+    else:
+        full_data = {"counts" : counts, "L" : Ls, "p" : ps, "x" : xs, "y" : ys}
+        return train_dataset, test_dataset, full_data
 
-def save_model(args, model, scaler, train_loader, test_loader, train_losses, test_losses):
+def save_model(args, model, scaler, data, train_dataset, test_dataset, train_loader, test_loader, train_losses, test_losses):
     full_path = f"{args.path}/{args.savename}"
     Path(f"{full_path}").mkdir(parents=True, exist_ok=True)
     save_data = {
         "args" : args,
         "scaler" : scaler,
+        "data" : data,
+        "datasets" : {
+            "train" : train_dataset,
+            "test" : test_dataset
+        },
         "loaders" : {
             "train" : train_loader,
             "test" : test_loader
@@ -203,7 +212,7 @@ def main():
     dec = cvae.Decoder(inner_dim=args.latent_dim+args.label_input_dim, hidden_dim=args.hidden_dim, output_dim=args.nonlabel_input_dim+args.label_input_dim)
     model = cvae.cVAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim, label_dim=args.label_input_dim)
 
-    train_dataset, test_dataset = get_datasets(args, scaler)
+    train_dataset, test_dataset, full_data = get_datasets(args, scaler)
     train_loader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=True)
     if args.print_progress: print("Data loaded")
@@ -212,7 +221,7 @@ def main():
 
     train_log, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.epochs)
 
-    save_model(args, model, scaler, train_loader, test_loader, train_log, test_losses)
+    save_model(args, model, scaler, full_data, train_dataset, test_dataset, train_loader, test_loader, train_log, test_losses)
     if args.print_progress: print("Model saved")
 
     main_total = time()-main_time
