@@ -175,7 +175,7 @@ def save_model(args, model, scaler, train_loader, test_loader, train_losses, tes
             "test" : test_losses
         }
     }
-    with open(f"{full_path}/{args.savename}_data", "wb") as handle:
+    with open(f"{full_path}/{args.savename}_data.pickle", "wb") as handle:
         pickle.dump(save_data, handle)
     torch.save(model.state_dict(), f"{full_path}/{args.savename}_model.pt")
 
