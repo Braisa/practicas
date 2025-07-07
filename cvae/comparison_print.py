@@ -7,6 +7,7 @@ import pickle
 import argparse
 from pathlib import Path
 from cvae import Encoder, Decoder, cVAE
+from matplotlib import transforms
 
 def load_data(args):
     data = pd.read_pickle(f"{args.path}/{args.savename}/{args.savename}_data.pickle")
@@ -59,12 +60,12 @@ def comparison_ax(args, data, ax, true_counts, true_labels, gen_counts, gen_labe
     label_names = list(data["scaler"].scaling_data.keys())[1:]
     true_title, gen_title = "True: ", "Gen: "
     for label_name, true_label, gen_label in zip(label_names, true_labels, gen_labels):
-        true_title += f"{label_name}={true_label:.2f}"
-        gen_title += f"{label_name}={gen_label:.2f}"
-    
+        true_title += f" {label_name}={true_label:.2f} "
+        gen_title += f" {label_name}={gen_label:.2f} "
+ 
     spots = np.arange(1, 1+data["args"].nonlabel_input_dim)
-    ax.step(spots, true_counts, color = "tab:blue")
-    ax.step(spots, gen_counts, color = "tab:orange")
+    ax.step(spots, true_counts, color = "tab:blue", label=true_title)
+    ax.step(spots, gen_counts, color = "tab:orange", label=gen_title, alpha=.8)
 
     ax.xaxis.set_major_locator(plt.MultipleLocator(base=data["args"].nonlabel_input_dim/4))
     if minor:
@@ -75,8 +76,6 @@ def comparison_ax(args, data, ax, true_counts, true_labels, gen_counts, gen_labe
 
     ax.set_ylim(bottom=0)
     ax.set_xlim(left=1,right=data["args"].nonlabel_input_dim)
-
-    ax.set_title(f"{true_title}\n{gen_title}")
 
 def get_true_labels(args, data):
     L_in = np.unique(data["data"]["L"])[args.gen_input[0]]
@@ -97,8 +96,9 @@ def comparison_fig(args, data, model):
     true_labels, true_labels_up = get_true_labels(args, data)
     gen_counts_up, gen_labels_up, true_counts_up = generate_output(args, data, model, true_labels)
 
-    comparison_ax(args, data, ax, true_counts_up, true_labels, gen_counts_up, gen_labels_up)
-
+    comparison_ax(args, data, ax, true_counts_up, true_labels_up, gen_counts_up, gen_labels_up)
+    fig.legend(loc="outside upper center", frameon=False)
+    
     full_path = f"{data["args"].path}/{data["args"].savename}/figs"
     Path(f"{full_path}").mkdir(parents=True, exist_ok=True)
     fig.savefig(f"{full_path}/{args.figname}_comp.pdf", dpi=300, bbox_inches="tight")
