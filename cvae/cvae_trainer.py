@@ -57,12 +57,13 @@ def train_epoch(args, model, loader, optimizer, epoch):
     model.train()
     train_losses = []
     for batch_index, batch in enumerate(loader):
+        counts, labels = batch["counts"].to(args.device), batch["labels"].to(args.device)
         optimizer.zero_grad()
-        output = model(batch["counts"], batch["labels"])
-        loss = loss_function(output, batch["counts"], batch["labels"], args.beta)
+        output = model(counts, labels)
+        loss = loss_function(output, counts, labels, args.beta)
         loss.backward()
         optimizer.step()
-        train_losses.append(loss.item())
+        train_losses.append(loss.detach().cpu().numpy())
         if args.print_progress and batch_index % args.logging_interval == 0:
             header = f"TRAINING\tEpoch {epoch}"
             current, max = batch_index*len(batch["counts"]), len(loader.dataset)
@@ -80,8 +81,9 @@ def test(args, model, loader, epoch=None):
     losses = []
     with torch.no_grad():
         for batch_index, batch in enumerate(loader):
-            output = model(batch["counts"], batch["labels"])
-            current_loss = loss_function(output, batch["counts"], batch["labels"], args.beta).item()
+            counts, labels = batch["counts"].to(args.device), batch["labels"].to(args.device)
+            output = model(counts, labels)
+            current_loss = loss_function(output, counts, labels, args.beta).detach().cpu().numpy()
             losses.append(current_loss)
             if args.print_progress:
                 if not epoch:
@@ -133,6 +135,10 @@ def get_args():
     parser.add_argument("--test-batch-size", type=str, default=1000,
                         help="Testing batch size (default=1000)")
     # Miscellaneous
+    parser.add_argument("--disable-cuda", type=bool, default=True,
+                        help="Whether to disable CUDA (default=True)")
+    parser.add_argument("--gpu", type=str, default="",
+                        help="GPU")
     parser.add_argument("--seed", type=int, default=1,
                         help="Random seed for torch (default=1)")
     parser.add_argument("--logging-interval", type=int, default=50,
@@ -140,15 +146,20 @@ def get_args():
     parser.add_argument("--print-progress", type=bool, default=True,
                         help="Whether to print epoch progress or not (default=True)")
     args = parser.parse_args()
+    args.device = None
+    if not args.disable_cuda and torch.cuda.is_available():
+        args.device = torch.device(f"cuda:{args.gpu}")
+    else:
+        args.device = torch.device("cpu")
     return args
 
 def get_datasets(args, scaler, return_full_data=True):
     df = pd.DataFrame(pd.read_pickle(args.data_path))
-    counts = scaler.downscale("counts", torch.tensor(list(df["nphotons"].values), dtype=torch.float))
-    Ls = scaler.downscale("L", torch.tensor(list(df["dcol"].values), dtype=torch.float))
-    ps = scaler.downscale("p", torch.tensor(list(df["p"].values), dtype=torch.float))
-    xs = scaler.downscale("x", torch.tensor(list(df["x"].values), dtype=torch.float))
-    ys = scaler.downscale("y", torch.tensor(list(df["y"].values), dtype=torch.float))
+    counts = scaler.downscale("counts", torch.tensor(list(df["nphotons"].values), dtype=torch.float).to(args.device))
+    Ls = scaler.downscale("L", torch.tensor(list(df["dcol"].values), dtype=torch.float).to(args.device))
+    ps = scaler.downscale("p", torch.tensor(list(df["p"].values), dtype=torch.float).to(args.device))
+    xs = scaler.downscale("x", torch.tensor(list(df["x"].values), dtype=torch.float).to(args.device))
+    ys = scaler.downscale("y", torch.tensor(list(df["y"].values), dtype=torch.float).to(args.device))
     
     tr_c, te_c = train_test_split(counts, test_size=args.test_split, random_state=args.seed)
     tr_l, te_l = train_test_split(Ls, test_size=args.test_split, random_state=args.seed)
@@ -210,7 +221,7 @@ def main():
 
     enc = cvae.Encoder(input_dim=args.nonlabel_input_dim+args.label_input_dim, hidden_dim=args.hidden_dim, inner_dim=args.latent_dim)
     dec = cvae.Decoder(inner_dim=args.latent_dim+args.label_input_dim, hidden_dim=args.hidden_dim, output_dim=args.nonlabel_input_dim+args.label_input_dim)
-    model = cvae.cVAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim, label_dim=args.label_input_dim)
+    model = cvae.cVAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim, label_dim=args.label_input_dim).to(args.device)
 
     train_dataset, test_dataset, full_data = get_datasets(args, scaler)
     train_loader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
