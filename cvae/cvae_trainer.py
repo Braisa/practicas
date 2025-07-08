@@ -199,6 +199,35 @@ def save_model(args, model, scaler, data, train_dataset, test_dataset, train_loa
         pickle.dump(save_data, handle)
     torch.save(model.state_dict(), f"{full_path}/{args.savename}_model.pt")
 
+def save_losses(args, train_losses, test_losses, train_loader, test_loader):
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
+    fig, ax = plt.subplots()
+
+    train_spots = np.arange(1, 1+args.epochs*(1+(len(train_loader.dataset)//args.train_batch_size))) * args.train_batch_size
+    test_spots = np.arange(1, 1+len(test_losses)) * len(train_loader.dataset)
+
+    ax.plot(train_spots, train_losses, ls="solid", color="tab:blue", label="Train loss")
+    ax.plot(test_spots, test_losses, ls="solid", color="tab:orange", label="Test loss")
+
+    ax.xaxis.set_major_locator(plt.FixedLocator([i*len(train_loader.dataset) for i in range(0, 1+args.epochs)]))
+    ax.xaxis.set_major_formatter(ticker.FixedFormatter([f"{i}" for i in range(0, 1+args.epochs)]))
+    
+    ax.set_xlim(left=0)
+    ax.set_xlabel("Epochs")
+
+    ax.legend(loc="best")
+    
+    full_path = f"{args.path}/{args.savename}"
+    Path(f"{full_path}").mkdir(parents=True, exist_ok=True)
+    fig.savefig(f"{full_path}/{args.savename}_full_losses.pdf", dpi=300, bbox_inches="tight")
+
+    ax.set_xlim(left=len(train_loader.dataset))
+    top_lim = max(test_losses[1], train_losses[1+(len(train_loader.dataset)//args.train_batch_size)])
+    print(top_lim, test_losses[1])
+    ax.set_ylim(bottom=0, top=top_lim)
+    fig.savefig(f"{full_path}/{args.savename}_losses.pdf", dpi=300, bbox_inches="tight")
+
 def train_for_epochs(args, model, optimizer, train_loader, test_loader, epochs, no_print=False):
     if args.print_progress: print("Training start")
     train_losses, test_losses = [], []
@@ -208,7 +237,7 @@ def train_for_epochs(args, model, optimizer, train_loader, test_loader, epochs, 
         test_loss = test(args, model, test_loader, epoch=epoch, no_print=no_print)
         test_losses.append(test_loss)
     if args.print_progress: print("Training end")
-    return train_log, test_losses
+    return train_losses, test_losses
 
 def main():
     main_time = time()
@@ -230,9 +259,10 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    train_log, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.epochs)
+    train_losses, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.epochs)
 
-    save_model(args, model, scaler, full_data, train_dataset, test_dataset, train_loader, test_loader, train_log, test_losses)
+    save_model(args, model, scaler, full_data, train_dataset, test_dataset, train_loader, test_loader, train_losses, test_losses)
+    save_losses(args, np.ravel(train_losses), test_losses, train_loader, test_loader)
     if args.print_progress: print("Model saved")
 
     main_total = time()-main_time
