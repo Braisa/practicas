@@ -1,7 +1,9 @@
-import torch # type: ignore
-from torch.utils.data import Dataset # type: ignore
+import torch
+from torch.utils.data import Dataset
+import sys
+sys.path.append('/scratch12/brais_otero/practicas/')
 from utils import scaler
-import pandas as pd # type: ignore
+import pandas as pd
 
 class CounterDataset(Dataset):
     def __init__(self, counts, Ls, ps, xs, ys):

@@ -1,9 +1,9 @@
-import torch # type: ignore
-import torch.nn as nn # type: ignore
-from torch.utils.data import DataLoader #type: ignore
-from sklearn.model_selection import train_test_split # type: ignore
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from sklearn.model_selection import train_test_split
 import numpy as np
-import pandas as pd # type: ignore
+import pandas as pd
 import cvae
 import counter_dataset
 import argparse
@@ -52,7 +52,7 @@ def _print_finish(header, message):
     print(f"\033[K", end="\r")
     print(f"{header}\t{message}")
 
-def train_epoch(args, model, loader, optimizer, epoch):
+def train_epoch(args, model, loader, optimizer, epoch, no_print=False):
     initial_time = time()
     model.train()
     train_losses = []
@@ -68,14 +68,15 @@ def train_epoch(args, model, loader, optimizer, epoch):
             header = f"TRAINING\tEpoch {epoch}"
             current, max = batch_index*len(batch["counts"]), len(loader.dataset)
             message = f"Loss: {loss.item():.6f}"
-            _print_progress(header, current, max, message)
-    if args.print_progress:
+            if not no_print:
+                _print_progress(header, current, max, message)
+    if args.print_progress and not no_print:
         header = f"TRAINING\tEpoch {epoch} end"
         message = f"Average loss: {np.mean(train_losses):.6f}\t({time()-initial_time:.2f}s elapsed)"
         _print_finish(header, message)
     return train_losses
 
-def test(args, model, loader, epoch=None):
+def test(args, model, loader, epoch=None, no_print=False):
     initial_time = time()
     model.eval()
     losses = []
@@ -92,9 +93,10 @@ def test(args, model, loader, epoch=None):
                     header = f" TESTING\tEpoch {epoch}"
                 current, max = batch_index*len(batch["counts"]), len(loader.dataset)
                 message = f"Loss: {current_loss:.6f}"
-                _print_progress(header, current, max, message)
+                if not no_print:
+                    _print_progress(header, current, max, message)
     test_loss = np.mean(losses)
-    if args.print_progress:
+    if args.print_progress and not no_print:
         if not epoch:
             header = f" TESTING\tend"
         else:
@@ -130,15 +132,13 @@ def get_args():
                         help="Number of training epochs (default=50)")
     parser.add_argument("--learning-rate", "-lr", type=float, default=1e-3,
                         help="Optimizer learning rate (default=1e-3)")
-    parser.add_argument("--train-batch-size", type=int, default=64,
-                        help="Training batch size (default=64)")
+    parser.add_argument("--train-batch-size", type=int, default=512,
+                        help="Training batch size (default=512)")
     parser.add_argument("--test-batch-size", type=str, default=1000,
                         help="Testing batch size (default=1000)")
     # Miscellaneous
-    parser.add_argument("--disable-cuda", type=bool, default=True,
-                        help="Whether to disable CUDA (default=True)")
-    parser.add_argument("--gpu", type=str, default="",
-                        help="GPU")
+    parser.add_argument("--disable-cuda", type=bool, default=False,
+                        help="Whether to disable CUDA (default=False)")
     parser.add_argument("--seed", type=int, default=1,
                         help="Random seed for torch (default=1)")
     parser.add_argument("--logging-interval", type=int, default=50,
@@ -148,18 +148,18 @@ def get_args():
     args = parser.parse_args()
     args.device = None
     if not args.disable_cuda and torch.cuda.is_available():
-        args.device = torch.device(f"cuda:{args.gpu}")
+        args.device = torch.device("cuda")
     else:
         args.device = torch.device("cpu")
     return args
 
 def get_datasets(args, scaler, return_full_data=True):
     df = pd.DataFrame(pd.read_pickle(args.data_path))
-    counts = scaler.downscale("counts", torch.tensor(list(df["nphotons"].values), dtype=torch.float).to(args.device))
-    Ls = scaler.downscale("L", torch.tensor(list(df["dcol"].values), dtype=torch.float).to(args.device))
-    ps = scaler.downscale("p", torch.tensor(list(df["p"].values), dtype=torch.float).to(args.device))
-    xs = scaler.downscale("x", torch.tensor(list(df["x"].values), dtype=torch.float).to(args.device))
-    ys = scaler.downscale("y", torch.tensor(list(df["y"].values), dtype=torch.float).to(args.device))
+    counts = scaler.downscale("counts", torch.tensor(list(df["nphotons"].values), dtype=torch.float))
+    Ls = scaler.downscale("L", torch.tensor(list(df["dcol"].values), dtype=torch.float))
+    ps = scaler.downscale("p", torch.tensor(list(df["p"].values), dtype=torch.float))
+    xs = scaler.downscale("x", torch.tensor(list(df["x"].values), dtype=torch.float))
+    ys = scaler.downscale("y", torch.tensor(list(df["y"].values), dtype=torch.float))
     
     tr_c, te_c = train_test_split(counts, test_size=args.test_split, random_state=args.seed)
     tr_l, te_l = train_test_split(Ls, test_size=args.test_split, random_state=args.seed)
@@ -199,13 +199,13 @@ def save_model(args, model, scaler, data, train_dataset, test_dataset, train_loa
         pickle.dump(save_data, handle)
     torch.save(model.state_dict(), f"{full_path}/{args.savename}_model.pt")
 
-def train_for_epochs(args, model, optimizer, train_loader, test_loader, epochs):
+def train_for_epochs(args, model, optimizer, train_loader, test_loader, epochs, no_print=False):
     if args.print_progress: print("Training start")
     train_losses, test_losses = [], []
-    for epoch in range(1, 1+args.epochs):
-        train_log = train_epoch(args, model, train_loader, optimizer, epoch)
+    for epoch in range(1, 1+epochs):
+        train_log = train_epoch(args, model, train_loader, optimizer, epoch, no_print=no_print)
         train_losses.append(train_log)
-        test_loss = test(args, model, test_loader, epoch=epoch)
+        test_loss = test(args, model, test_loader, epoch=epoch, no_print=no_print)
         test_losses.append(test_loss)
     if args.print_progress: print("Training end")
     return train_log, test_losses
