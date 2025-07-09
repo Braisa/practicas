@@ -19,12 +19,13 @@ def objective(args, trial):
     test_loader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=True)
 
     hidden_dim_trial = trial.suggest_int("hidden_dim", 2, 128)
+    hidden_layers_trial = trial.suggest_int("hidden_layers", 2, 8)
     lr_trial = trial.suggest_float("learning_rate", 1e-5, 1e-1)
 
     nlid, lid, ld = args.nonlabel_input_dim, args.label_input_dim, args.latent_dim
-    enc = Encoder(input_dim=nlid+lid, hidden_dim=hidden_dim_trial, inner_dim=ld)
-    dec = Decoder(inner_dim=ld+lid, hidden_dim=hidden_dim_trial, output_dim=nlid+lid)
-    model = cVAE(Encoder=enc, Decoder=dec, latent_dim=ld, label_dim=lid).to(args.device)
+    enc = Encoder(input_dim=nlid+lid, hidden_dim=hidden_dim_trial, inner_dim=ld, hidden_layers=hidden_layers_trial)
+    dec = Decoder(inner_dim=ld+lid, hidden_dim=hidden_dim_trial, output_dim=nlid+lid, hidden_layers=hidden_layers_trial)
+    model = cVAE(Encoder=enc, Decoder=dec, latent_dim=ld, label_dim=lid, hidden_layers=hidden_layers_trial).to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_trial)
 
     train_losses, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.trial_epochs)

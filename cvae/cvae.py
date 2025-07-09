@@ -2,18 +2,21 @@ import torch
 import torch.nn as nn
 
 class Encoder(nn.Module):
-    def __init__(self, input_dim, hidden_dim, inner_dim):
+    def __init__(self, input_dim, hidden_dim, inner_dim, hidden_layers=2):
         super(Encoder, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.inner_dim = inner_dim
-        self.encoding_layers = nn.Sequential(
+        self.hidden_layers = hidden_layers
+        encoding_layers = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
-            nn.Sigmoid(),
-            nn.Linear(hidden_dim, hidden_dim),
             nn.Sigmoid()
         )
+        for _ in range(hidden_layers-1):
+            encoding_layers.append(nn.Linear(hidden_dim, hidden_dim))
+            encoding_layers.append(nn.Sigmoid())
+        self.encoding_layers = encoding_layers
         self.mean_layer = nn.Linear(hidden_dim, inner_dim)
         self.logvar_layer = nn.Linear(hidden_dim, inner_dim)
     
@@ -24,20 +27,22 @@ class Encoder(nn.Module):
         return mean, logvar
 
 class Decoder(nn.Module):
-    def __init__(self, inner_dim, hidden_dim, output_dim):
+    def __init__(self, inner_dim, hidden_dim, output_dim, hidden_layers=2):
         super(Decoder, self).__init__()
         self.inner_dim = inner_dim
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
-        self.decoding_layers = nn.Sequential(
+        decoding_layers = nn.Sequential(
             nn.Linear(inner_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
-            nn.Sigmoid(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.Sigmoid(),
-            nn.Linear(hidden_dim, output_dim),
             nn.Sigmoid()
         )
+        for _ in range(hidden_layers-1):
+            decoding_layers.append(nn.Linear(hidden_dim, hidden_dim))
+            decoding_layers.append(nn.Sigmoid())
+        decoding_layers.append(nn.Linear(hidden_dim, output_dim))
+        decoding_layers.append(nn.Sigmoid())
+        self.decoding_layers = decoding_layers
     
     def forward(self, z, l, dim=1):
         total_input = torch.cat((z,l), dim=dim)
@@ -45,10 +50,11 @@ class Decoder(nn.Module):
         return t
 
 class cVAE(nn.Module):
-    def __init__(self, Encoder, Decoder, latent_dim=3, label_dim=4):
+    def __init__(self, Encoder, Decoder, latent_dim=3, label_dim=4, hidden_layers=2):
         super(cVAE, self).__init__()
         self.latent_dim = latent_dim
         self.label_dim = label_dim
+        self.hidden_layers = hidden_layers
         self.Encoder = Encoder
         self.Decoder = Decoder
     

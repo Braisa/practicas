@@ -119,6 +119,8 @@ def get_args():
                         help="Label input size (default=4)")
     parser.add_argument("--hidden-dim", "-hd", type=int, default=32,
                         help="Hidden layer size (default=32)")
+    parser.add_argument("--hidden-layers", "-hl", type=int, default=2,
+                        help="Number of hidden layers on each side (default=2)")
     parser.add_argument("--latent-dim", "-ld", type=int, default=3,
                         help="Latent space size (default=3)")
     parser.add_argument("--beta", type=float, default=0.5,
@@ -226,9 +228,6 @@ def save_losses(args, train_losses, test_losses, train_loader, test_loader):
     Path(f"{full_path}").mkdir(parents=True, exist_ok=True)
     fig.savefig(f"{full_path}/{args.savename}_full_losses.pdf", dpi=300, bbox_inches="tight")
 
-    ax.set_xlim(left=1, right=args.epochs+1)
-    fig.savefig(f"{full_path}/{args.savename}_losses.pdf", dpi=300, bbox_inches="tight")
-
 def train_for_epochs(args, model, optimizer, train_loader, test_loader, epochs, no_print=False):
     if args.print_progress: print("Training start")
     train_losses, test_losses = [], []
@@ -249,9 +248,9 @@ def main():
     
     torch.manual_seed(args.seed)
 
-    enc = cvae.Encoder(input_dim=args.nonlabel_input_dim+args.label_input_dim, hidden_dim=args.hidden_dim, inner_dim=args.latent_dim)
-    dec = cvae.Decoder(inner_dim=args.latent_dim+args.label_input_dim, hidden_dim=args.hidden_dim, output_dim=args.nonlabel_input_dim+args.label_input_dim)
-    model = cvae.cVAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim, label_dim=args.label_input_dim).to(args.device)
+    enc = cvae.Encoder(input_dim=args.nonlabel_input_dim+args.label_input_dim, hidden_dim=args.hidden_dim, inner_dim=args.latent_dim, hidden_layers=args.hidden_layers)
+    dec = cvae.Decoder(inner_dim=args.latent_dim+args.label_input_dim, hidden_dim=args.hidden_dim, output_dim=args.nonlabel_input_dim+args.label_input_dim, hidden_layers=args.hidden_layers)
+    model = cvae.cVAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim, label_dim=args.label_input_dim, hidden_layers=args.hidden_layers).to(args.device)
 
     train_dataset, test_dataset, full_data = get_datasets(args, scaler)
     train_loader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
