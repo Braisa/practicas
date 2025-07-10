@@ -10,6 +10,7 @@ import argparse
 import pickle
 from pathlib import Path
 from time import time
+from utils.early_stopper import EarlyStopper
 
 def loss_function(output, target_counts, target_labels, beta):
     """
@@ -76,10 +77,11 @@ def train_epoch(args, model, loader, optimizer, epoch, no_print=False):
         _print_finish(header, message)
     return train_losses
 
-def test(args, model, loader, epoch=None, no_print=False):
+def test(args, model, loader, epoch=None, early_stopper=None, no_print=False):
     initial_time = time()
     model.eval()
     losses = []
+    early_stop = False
     with torch.no_grad():
         for batch_index, batch in enumerate(loader):
             counts, labels = batch["counts"].to(args.device), batch["labels"].to(args.device)
@@ -103,7 +105,9 @@ def test(args, model, loader, epoch=None, no_print=False):
             header = f" TESTING\tEpoch {epoch} end"
         message = f"Average loss: {test_loss:.6f}\t({time()-initial_time:.2f}s elapsed)"
         _print_finish(header, message)
-    return test_loss
+    if early_stopper:
+        early_stop = early_stopper.check_early_stop(test_loss)
+    return test_loss, early_stop
 
 def get_args():
     parser = argparse.ArgumentParser(description="cVAE Trainer")
@@ -138,6 +142,12 @@ def get_args():
                         help="Training batch size (default=512)")
     parser.add_argument("--test-batch-size", type=str, default=1000,
                         help="Testing batch size (default=1000)")
+    parser.add_argument("--early-stop", type=bool, default=True,
+                        help="Whether to use an early stopper (default=True)")
+    parser.add_argument("--early-stop-rel-delta", type=float, default=0.05,
+                        help="Relative delta for the early stopper (default=0.05)")
+    parser.add_argument("--early-stop-patience", type=int, default=10,
+                        help="Patience for the early stopper (default=10)")
     # Miscellaneous
     parser.add_argument("--disable-cuda", type=bool, default=False,
                         help="Whether to disable CUDA (default=False)")
@@ -228,14 +238,17 @@ def save_losses(args, train_losses, test_losses, train_loader, test_loader):
     Path(f"{full_path}").mkdir(parents=True, exist_ok=True)
     fig.savefig(f"{full_path}/{args.savename}_full_losses.pdf", dpi=300, bbox_inches="tight")
 
-def train_for_epochs(args, model, optimizer, train_loader, test_loader, epochs, no_print=False):
+def train_for_epochs(args, model, optimizer, train_loader, test_loader, epochs, early_stopper=None, no_print=False):
     if args.print_progress: print("Training start")
     train_losses, test_losses = [], []
     for epoch in range(1, 1+epochs):
         train_log = train_epoch(args, model, train_loader, optimizer, epoch, no_print=no_print)
         train_losses.append(train_log)
-        test_loss = test(args, model, test_loader, epoch=epoch, no_print=no_print)
+        test_loss, early_stop = test(args, model, test_loader, epoch=epoch, early_stopper=early_stopper, no_print=no_print)
         test_losses.append(test_loss)
+        if early_stop:
+            if args.print_progress: print(f"Early stop at epoch {epoch}.")
+            break
     if args.print_progress: print("Training end")
     return train_losses, test_losses
 
@@ -245,7 +258,9 @@ def main():
 
     args = get_args()
     scaler = counter_dataset.create_counter_scaler()
-    
+    if not args.early_stop: early_stopper = None
+    else: early_stopper = EarlyStopper(patience=args.early_stop_patience, rel_delta=args.early_stop_rel_delta)
+
     torch.manual_seed(args.seed)
 
     enc = cvae.Encoder(input_dim=args.nonlabel_input_dim+args.label_input_dim, hidden_dim=args.hidden_dim, inner_dim=args.latent_dim, hidden_layers=args.hidden_layers)
@@ -259,7 +274,7 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    train_losses, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.epochs)
+    train_losses, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.epochs, early_stopper=early_stopper)
 
     save_model(args, model, scaler, full_data, train_dataset, test_dataset, train_loader, test_loader, train_losses, test_losses)
     save_losses(args, np.ravel(train_losses), test_losses, train_loader, test_loader)

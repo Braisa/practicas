@@ -12,8 +12,9 @@ from cvae import Encoder, Decoder, cVAE
 from cvae_trainer import train_for_epochs, get_datasets
 from counter_dataset import create_counter_scaler
 from time import time
+from utils.early_stopper import EarlyStopper
 
-def objective(args, trial, train_loader, test_loader):
+def objective(args, trial, train_loader, test_loader, early_stopper=None):
     hidden_dim_trial = trial.suggest_int("hidden_dim", 2, 128)
     hidden_layers_trial = trial.suggest_int("hidden_layers", 2, 8)
     lr_trial = trial.suggest_float("learning_rate", 1e-5, 1e-1)
@@ -24,7 +25,7 @@ def objective(args, trial, train_loader, test_loader):
     model = cVAE(Encoder=enc, Decoder=dec, latent_dim=ld, label_dim=lid, hidden_layers=hidden_layers_trial).to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_trial)
 
-    train_losses, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.trial_epochs)
+    train_losses, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.trial_epochs, early_stopper=early_stopper)
     return test_losses[-1]
 
 def _pretty_time(time):
@@ -78,6 +79,12 @@ def get_args():
                         help="Training batch size (default=512)")
     parser.add_argument("--test-batch-size", type=str, default=1000,
                         help="Testing batch size (default=1000)")
+    parser.add_argument("--early-stop", type=bool, default=True,
+                        help="Whether to use an early stopper (default=True)")
+    parser.add_argument("--early-stop-rel-delta", type=float, default=0.05,
+                        help="Relative delta for the early stopper (default=0.05)")
+    parser.add_argument("--early-stop-patience", type=int, default=10,
+                        help="Patience for the early stopper (default=10)")
     # Miscellaneous
     parser.add_argument("--disable-cuda", type=bool, default=False,
                         help="Whether to disable CUDA (default=False)")
@@ -104,11 +111,14 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=True)
 
+    if not args.early_stop: early_stopper = None
+    else: early_stopper = EarlyStopper(patience=args.early_stop_patience, rel_delta=args.early_stop_rel_delta)
+    
     torch.manual_seed(args.seed)
 
     sampler = optuna.samplers.TPESampler(seed=args.seed)
     study = optuna.create_study(sampler=sampler, direction="minimize")
-    study.optimize(lambda trial : objective(args, trial, train_loader, test_loader), n_trials=args.trials, callbacks=[lambda study, trial : print_best(study, trial, main_time)])
+    study.optimize(lambda trial : objective(args, trial, train_loader, test_loader, early_stopper=early_stopper), n_trials=args.trials, callbacks=[lambda study, trial : print_best(study, trial, main_time)])
     
     best_trial = study.best_trial
     print(f"----------\nBest trial ({best_trial.number})\n----------")
