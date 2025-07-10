@@ -13,11 +13,7 @@ from cvae_trainer import train_for_epochs, get_datasets
 from counter_dataset import create_counter_scaler
 from time import time
 
-def objective(args, trial):
-    train_dataset, test_dataset, full_data = get_datasets(args, create_counter_scaler())
-    train_loader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=True)
-
+def objective(args, trial, train_loader, test_loader):
     hidden_dim_trial = trial.suggest_int("hidden_dim", 2, 128)
     hidden_layers_trial = trial.suggest_int("hidden_layers", 2, 8)
     lr_trial = trial.suggest_float("learning_rate", 1e-5, 1e-1)
@@ -104,11 +100,15 @@ def main():
 
     args = get_args()
 
+    train_dataset, test_dataset, full_data = get_datasets(args, create_counter_scaler())
+    train_loader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=True)
+
     torch.manual_seed(args.seed)
 
     sampler = optuna.samplers.TPESampler(seed=args.seed)
     study = optuna.create_study(sampler=sampler, direction="minimize")
-    study.optimize(lambda trial : objective(args, trial), n_trials=args.trials, callbacks=[lambda study, trial : print_best(study, trial, main_time)])
+    study.optimize(lambda trial : objective(args, trial, train_loader, test_loader), n_trials=args.trials, callbacks=[lambda study, trial : print_best(study, trial, main_time)])
     
     best_trial = study.best_trial
     print(f"----------\nBest trial ({best_trial.number})\n----------")
