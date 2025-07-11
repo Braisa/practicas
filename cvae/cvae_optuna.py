@@ -30,7 +30,7 @@ def objective(args, trial, train_loader, test_loader, early_stopper=None):
     ).to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_trial)
 
-    train_losses, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.trial_epochs, early_stopper=early_stopper)
+    train_losses, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.trial_epochs, early_stopper=early_stopper, no_print=not args.epoch_print)
     return test_losses[-1]
 
 def _pretty_time(time):
@@ -98,6 +98,8 @@ def get_args():
     parser.add_argument("--logging-interval", type=int, default=50,
                         help="Training log print interval (default=50)")
     parser.add_argument("--print-progress", type=bool, default=True,
+                        help="Whether to print epoch progress or not (default=True)")
+    parser.add_argument("--epoch-print", type=bool, default=True,
                         help="Whether to print epoch progress or not (default=True)")
     args = parser.parse_args()
     args.device = None

@@ -157,6 +157,8 @@ def get_args():
                         help="Training log print interval (default=50)")
     parser.add_argument("--print-progress", type=bool, default=True,
                         help="Whether to print epoch progress or not (default=True)")
+    parser.add_argument("--epoch-print", type=bool, default=True,
+                        help="Whether to print epoch progress or not (default=True)")
     args = parser.parse_args()
     args.device = None
     if not args.disable_cuda and torch.cuda.is_available():
@@ -279,7 +281,7 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    train_losses, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.epochs, early_stopper=early_stopper)
+    train_losses, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.epochs, early_stopper=early_stopper, no_print=not args.epoch_print)
 
     save_model(args, model, scaler, full_data, train_dataset, test_dataset, train_loader, test_loader, train_losses, test_losses)
     save_losses(args, np.ravel(train_losses), test_losses, train_loader, test_loader)
