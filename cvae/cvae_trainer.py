@@ -5,7 +5,7 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 import pandas as pd
 from cvae import create_cVAE
-import counter_dataset
+from utils import counter_dataset
 import argparse
 import pickle
 from pathlib import Path

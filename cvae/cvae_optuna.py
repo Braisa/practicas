@@ -10,7 +10,7 @@ import sys
 sys.path.append("/scratch12/brais_otero/practicas/")
 from cvae import create_cVAE
 from cvae_trainer import train_for_epochs, get_datasets
-from counter_dataset import create_counter_scaler
+from utils.counter_dataset import create_counter_scaler
 from time import time
 from utils.early_stopper import EarlyStopper
 
