@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 import sys
 sys.path.append("/scratch12/brais_otero/practicas/")
-from cvae import Encoder, Decoder, cVAE
+from cvae import create_cVAE
 from cvae_trainer import train_for_epochs, get_datasets
 from counter_dataset import create_counter_scaler
 from time import time
@@ -20,9 +20,14 @@ def objective(args, trial, train_loader, test_loader, early_stopper=None):
     lr_trial = trial.suggest_float("learning_rate", 1e-5, 1e-1)
 
     nlid, lid, ld = args.nonlabel_input_dim, args.label_input_dim, args.latent_dim
-    enc = Encoder(input_dim=nlid+lid, hidden_dim=hidden_dim_trial, inner_dim=ld, hidden_layers=hidden_layers_trial)
-    dec = Decoder(inner_dim=ld+lid, hidden_dim=hidden_dim_trial, output_dim=nlid+lid, hidden_layers=hidden_layers_trial)
-    model = cVAE(Encoder=enc, Decoder=dec, latent_dim=ld, label_dim=lid, hidden_layers=hidden_layers_trial).to(args.device)
+    model = create_cVAE(
+        nonlabel_input_dim=nlid,
+        label_input_dim=lid,
+        hidden_dim=hidden_dim_trial,
+        latent_dim=ld,
+        enc_hidden_layers=hidden_layers_trial,
+        dec_hidden_layers=hidden_layers_trial
+    ).to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_trial)
 
     train_losses, test_losses = train_for_epochs(args, model, optimizer, train_loader, test_loader, args.trial_epochs, early_stopper=early_stopper)

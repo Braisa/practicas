@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 import numpy as np
 import pandas as pd
-import cvae
+from cvae import create_cVAE
 import counter_dataset
 import argparse
 import pickle
@@ -263,10 +263,15 @@ def main():
 
     torch.manual_seed(args.seed)
 
-    enc = cvae.Encoder(input_dim=args.nonlabel_input_dim+args.label_input_dim, hidden_dim=args.hidden_dim, inner_dim=args.latent_dim, hidden_layers=args.hidden_layers)
-    dec = cvae.Decoder(inner_dim=args.latent_dim+args.label_input_dim, hidden_dim=args.hidden_dim, output_dim=args.nonlabel_input_dim+args.label_input_dim, hidden_layers=args.hidden_layers)
-    model = cvae.cVAE(Encoder=enc, Decoder=dec, latent_dim=args.latent_dim, label_dim=args.label_input_dim, hidden_layers=args.hidden_layers).to(args.device)
-
+    model = create_cVAE(
+        nonlabel_input_dim=args.nonlabel_input_dim,
+        label_input_dim=args.label_input_dim,
+        hidden_dim=args.hidden_dim,
+        latent_dim=args.latent_dim,
+        enc_hidden_layers=args.hidden_layers,
+        dec_hidden_layer=args.hidden_layers
+    ).to(args.device)
+    
     train_dataset, test_dataset, full_data = get_datasets(args, scaler)
     train_loader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=True)

@@ -69,7 +69,7 @@ class cVAE(nn.Module):
         t = self.Decoder(z, l)
         return t, mean, logvar
 
-def create_cVAE(nonlabel_input_dim: int, label_input_dim: int, hidden_dim: int, latent_dim: int) -> cVAE:
+def create_cVAE(nonlabel_input_dim: int, label_input_dim: int, hidden_dim: int, latent_dim: int, enc_hidden_layers: int, dec_hidden_layers: int) -> cVAE:
     """
     Creates a Conditional Variational Autoencoder model.
 
@@ -83,13 +83,17 @@ def create_cVAE(nonlabel_input_dim: int, label_input_dim: int, hidden_dim: int, 
         Size of the hidden layers of the neural network.
     latent_dim : int
         Size of the latent neurons in the neural network. Note that this excludes the amount of labels.
+    enc_hidden_layers : int
+        Number of hidden layers for the Encoder's neural network.
+    dec_hidden_layers : int
+        Number of hidden layers for the Decoder's neural network.
     
     Returns
     -------
     cvae : cVAE
         Conditional Variational Autoencoder model created.
     """
-    enc = Encoder(input_dim=nonlabel_input_dim+label_input_dim, hidden_dim=hidden_dim, inner_dim=latent_dim)
-    dec = Decoder(inner_dim=latent_dim+label_input_dim, hidden_dim=hidden_dim, output_dim=nonlabel_input_dim+label_input_dim)
+    enc = Encoder(input_dim=nonlabel_input_dim+label_input_dim, hidden_dim=hidden_dim, inner_dim=latent_dim, hidden_layers=enc_hidden_layers)
+    dec = Decoder(inner_dim=latent_dim+label_input_dim, hidden_dim=hidden_dim, output_dim=nonlabel_input_dim+label_input_dim, hidden_layers=dec_hidden_layers)
     cvae = cVAE(Encoder=enc, Decoder=dec, latent_dim=latent_dim, label_dim=label_input_dim)
     return cvae
